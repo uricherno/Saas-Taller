@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { TarjetaAuth } from "../componentes";
+import { TarjetaAuth } from "@/components/ui";
 import FormRegistro from "./form-registro";
 
 export const metadata: Metadata = { title: "Registrar taller" };

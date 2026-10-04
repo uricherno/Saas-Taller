@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { iniciarSesion, type EstadoForm } from "../actions";
-import { Alerta, BotonEnviar, Campo } from "../componentes";
+import { Alerta, BotonEnviar, Campo } from "@/components/ui";
 
 export default function FormLogin({ aviso, esError }: { aviso?: string; esError?: boolean }) {
   const [estado, accion, cargando] = useActionState<EstadoForm, FormData>(iniciarSesion, {});

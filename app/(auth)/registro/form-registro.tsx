@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { registrarse, type EstadoForm } from "../actions";
-import { Alerta, BotonEnviar, Campo } from "../componentes";
+import { Alerta, BotonEnviar, Campo } from "@/components/ui";
 
 export default function FormRegistro() {
   const [estado, accion, cargando] = useActionState<EstadoForm, FormData>(registrarse, {});

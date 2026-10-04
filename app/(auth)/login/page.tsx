@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { TarjetaAuth } from "../componentes";
+import { TarjetaAuth } from "@/components/ui";
 import FormLogin from "./form-login";
 
 export const metadata: Metadata = { title: "Iniciar sesión" };
