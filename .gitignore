@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Copia de las skills que usa el CLI "skills" (Claude Code lee .claude/skills/, que sí se sube)
+/.agents/
