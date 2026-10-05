@@ -2,7 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { obtenerSesion } from "@/lib/sesion";
+import { puede } from "@/lib/permisos";
+import { faltaMigracion, MENSAJE_FALTA_MIGRACION } from "@/lib/db-errores";
+import { obtenerEquipo } from "@/lib/equipo";
+import { aFilasSeguimiento, seguimientosPendientes } from "@/lib/seguimientos";
+import { formatoFecha, hoyISO } from "@/lib/ordenes";
 import BotonEliminar from "@/components/boton-eliminar";
+import ListaSeguimientos from "@/components/lista-seguimientos";
+import { BotonBorrarVencimiento, FormNota, FormVencimiento, NuevoSeguimiento } from "@/components/crm";
 import ListaOrdenes from "@/components/lista-ordenes";
 import { BotonLink, Tarjeta, Volver } from "@/components/ui";
 import { eliminarVehiculo } from "../actions";
@@ -20,12 +28,15 @@ function Dato({ label, valor }: { label: string; valor: React.ReactNode }) {
 
 export default async function VehiculoPage({ params }: PageProps<"/vehiculos/[id]">) {
   const { id } = await params;
+  const { tallerId, rol, taller } = await obtenerSesion();
+  const puedeContactar = puede(rol, "contactarClientes");
   const supabase = await createClient();
 
   const { data: v } = await supabase
     .from("vehiculos")
     .select("id, patente, marca, modelo, anio, km_actual, cliente_id, clientes(id, nombre, telefono)")
     .eq("id", id)
+    .eq("taller_id", tallerId)
     .maybeSingle();
 
   if (!v) notFound();
@@ -33,13 +44,28 @@ export default async function VehiculoPage({ params }: PageProps<"/vehiculos/[id
   const cliente = Array.isArray(v.clientes) ? v.clientes[0] : v.clientes;
 
   // Historial: de la más reciente a la más antigua.
-  const { data: historial } = await supabase
+  const { data: historial, error: errorHistorial } = await supabase
     .from("ordenes_trabajo")
-    .select("id, fecha, estado, descripcion, total")
+    .select("id, fecha, estado, tipo_trabajo, descripcion, total")
     .eq("vehiculo_id", id)
+    .eq("taller_id", tallerId)
     .order("fecha", { ascending: false })
     .order("creado_en", { ascending: false });
   const ordenes = historial ?? [];
+
+  const [{ data: vencimientos }, { data: pendientes }, equipo] = await Promise.all([
+    supabase
+      .from("vencimientos_vehiculo")
+      .select("id, tipo, fecha, nota, avisado_en")
+      .eq("taller_id", tallerId)
+      .eq("vehiculo_id", id)
+      .order("fecha"),
+    seguimientosPendientes(tallerId, { vehiculoId: id }),
+    obtenerEquipo(tallerId),
+  ]);
+  const hoy = hoyISO();
+  const nombres = new Map(equipo.map((u) => [u.id, u.nombre]));
+  const etiquetaVencimiento = { vtv: "VTV", seguro: "Seguro", otro: "Otro" } as Record<string, string>;
 
   return (
     <div className="space-y-5">
@@ -55,9 +81,11 @@ export default async function VehiculoPage({ params }: PageProps<"/vehiculos/[id
               {[v.marca, v.modelo].filter(Boolean).join(" ") || "Marca y modelo sin cargar"}
             </p>
           </div>
-          <BotonLink href={`/vehiculos/${id}/editar`} variante="secundario">
-            Editar
-          </BotonLink>
+          {puede(rol, "editarClientes") && (
+            <BotonLink href={`/vehiculos/${id}/editar`} variante="secundario">
+              Editar
+            </BotonLink>
+          )}
         </div>
 
         <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 sm:grid-cols-4">
@@ -82,24 +110,90 @@ export default async function VehiculoPage({ params }: PageProps<"/vehiculos/[id
       )}
 
       <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-slate-900">Vencimientos</h2>
+          {puedeContactar && <FormVencimiento vehiculoId={id} />}
+        </div>
+        {!vencimientos?.length ? (
+          <p className="text-sm text-slate-500">Sin VTV ni seguro cargados. Se avisan en Recordatorios 15 días antes.</p>
+        ) : (
+          <ul className="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            {vencimientos.map((x) => {
+              const vencido = x.fecha < hoy;
+              return (
+                <li key={x.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-900">
+                      {etiquetaVencimiento[x.tipo] ?? x.tipo}{" "}
+                      <span className={`text-sm font-normal ${vencido ? "text-red-600" : "text-slate-500"}`}>
+                        {vencido ? "venció el" : "vence el"} {formatoFecha(x.fecha)}
+                      </span>
+                    </p>
+                    {x.nota && <p className="text-sm text-slate-600">{x.nota}</p>}
+                    {x.avisado_en && <p className="text-xs text-slate-500">Cliente avisado</p>}
+                  </div>
+                  {puede(rol, "borrar") && <BotonBorrarVencimiento id={x.id} />}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-slate-900">Seguimientos</h2>
+          {puedeContactar && (
+            <NuevoSeguimiento
+              clienteId={v.cliente_id}
+              vehiculoId={id}
+              equipo={equipo.filter((u) => u.activo)}
+              venceSugerido={hoy}
+            />
+          )}
+        </div>
+        {!pendientes?.length ? (
+          <p className="text-sm text-slate-500">No hay tareas pendientes con este vehículo.</p>
+        ) : (
+          <ListaSeguimientos
+            seguimientos={aFilasSeguimiento(pendientes, nombres)}
+            taller={taller?.nombre ?? "el taller"}
+            puedeGestionar={puedeContactar}
+            mostrarCliente={false}
+          />
+        )}
+        <Tarjeta>
+          <p className="mb-2 text-sm font-medium text-slate-700">Agregar una nota sobre este vehículo</p>
+          <FormNota clienteId={v.cliente_id} vehiculoId={id} soloNotas={!puedeContactar} />
+          <p className="mt-2 text-xs text-slate-500">Queda en el historial del cliente.</p>
+        </Tarjeta>
+      </section>
+
+      <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-slate-900">Historial de órdenes</h2>
-          <BotonLink href={`/vehiculos/${id}/ordenes/nueva`}>+ Nueva orden</BotonLink>
+          <BotonLink href={`/ordenes/nueva?vehiculo=${id}`}>+ Nueva orden</BotonLink>
         </div>
-        {ordenes.length === 0 ? (
+        {errorHistorial ? (
+          <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {faltaMigracion(errorHistorial) ? MENSAJE_FALTA_MIGRACION : "No se pudo cargar el historial."}
+          </p>
+        ) : ordenes.length === 0 ? (
           <Tarjeta className="text-center text-slate-600">Este vehículo todavía no tiene órdenes.</Tarjeta>
         ) : (
           <ListaOrdenes ordenes={ordenes} />
         )}
       </section>
 
-      <section className="border-t border-slate-200 pt-5">
-        <BotonEliminar
-          accion={eliminarVehiculo.bind(null, id, v.cliente_id)}
-          texto="Eliminar vehículo"
-          pregunta={`¿Seguro que querés eliminar el vehículo ${v.patente}?`}
-        />
-      </section>
+      {puede(rol, "borrar") && (
+        <section className="border-t border-slate-200 pt-5">
+          <BotonEliminar
+            accion={eliminarVehiculo.bind(null, id, v.cliente_id)}
+            texto="Eliminar vehículo"
+            pregunta={`¿Seguro que querés eliminar el vehículo ${v.patente}?`}
+          />
+        </section>
+      )}
     </div>
   );
 }

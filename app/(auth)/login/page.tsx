@@ -8,6 +8,7 @@ export const metadata: Metadata = { title: "Iniciar sesión" };
 const MENSAJES: Record<string, string> = {
   confirmado: "¡Email confirmado! Ya podés iniciar sesión.",
   enlace_invalido: "El enlace de confirmación no es válido o ya venció. Probá iniciar sesión o registrate de nuevo.",
+  desactivado: "Tu usuario está desactivado. Pedile al dueño del taller que te vuelva a activar.",
 };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
@@ -27,7 +28,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         </>
       }
     >
-      <FormLogin aviso={aviso} esError={mensaje === "enlace_invalido"} />
+      <FormLogin aviso={aviso} esError={mensaje === "enlace_invalido" || mensaje === "desactivado"} />
     </TarjetaAuth>
   );
 }

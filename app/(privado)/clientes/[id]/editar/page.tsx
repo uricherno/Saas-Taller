@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { obtenerSesion } from "@/lib/sesion";
+import { puede } from "@/lib/permisos";
+import SinPermiso from "@/components/sin-permiso";
 import FormCliente from "@/components/form-cliente";
 import { Tarjeta, Volver } from "@/components/ui";
 import { actualizarCliente } from "../../actions";
@@ -9,11 +12,14 @@ export const metadata: Metadata = { title: "Editar cliente" };
 
 export default async function EditarClientePage({ params }: PageProps<"/clientes/[id]/editar">) {
   const { id } = await params;
+  const { tallerId, rol } = await obtenerSesion();
+  if (!puede(rol, "editarClientes")) return <SinPermiso que="la edición de clientes" />;
   const supabase = await createClient();
   const { data: cliente } = await supabase
     .from("clientes")
-    .select("nombre, telefono, notas")
+    .select("nombre, telefono, notas, origen, etiquetas")
     .eq("id", id)
+    .eq("taller_id", tallerId)
     .maybeSingle();
 
   if (!cliente) notFound();

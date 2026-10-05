@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,6 +15,22 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: { default: "Taller App", template: "%s · Taller App" },
   description: "Gestión para talleres mecánicos",
+  applicationName: "Taller App",
+  // iOS: al agregarla a la pantalla de inicio se abre sin la barra de Safari.
+  appleWebApp: { capable: true, title: "Taller App", statusBarStyle: "default" },
+  icons: {
+    icon: [
+      { url: "/iconos/icono-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/iconos/icono-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/iconos/apple-touch-icon.png", sizes: "180x180" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#334155",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -7,14 +7,19 @@ const ITEMS = [
   { href: "/inicio", label: "Inicio" },
   { href: "/clientes", label: "Clientes" },
   { href: "/ordenes", label: "Órdenes" },
+  { href: "/seguimientos", label: "Seguimientos" },
+  { href: "/presupuestos", label: "Presupuestos" },
+  { href: "/recordatorios", label: "Recordatorios" },
+  { href: "/reactivacion", label: "Reactivación" },
 ];
 
-export default function Navegacion() {
+/** `extras`: pestañas que dependen del rol (ej: Equipo y Ajustes, solo para el dueño). */
+export default function Navegacion({ extras = [] }: { extras?: { href: string; label: string }[] }) {
   const pathname = usePathname();
 
   return (
-    <nav className="mx-auto flex max-w-4xl gap-1 px-4">
-      {ITEMS.map(({ href, label }) => {
+    <nav className="mx-auto flex max-w-4xl gap-1 overflow-x-auto px-4">
+      {[...ITEMS, ...extras].map(({ href, label }) => {
         // Las fichas de vehículos se consideran parte de "Clientes".
         const activo =
           pathname.startsWith(href) || (href === "/clientes" && pathname.startsWith("/vehiculos"));
@@ -22,7 +27,7 @@ export default function Navegacion() {
           <Link
             key={href}
             href={href}
-            className={`border-b-2 px-3 py-2 text-sm font-medium ${
+            className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium ${
               activo
                 ? "border-blue-600 text-blue-600"
                 : "border-transparent text-slate-500 hover:text-slate-800"

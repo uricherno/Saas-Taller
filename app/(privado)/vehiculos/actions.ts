@@ -2,17 +2,14 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { obtenerSesion } from "@/lib/sesion";
+import { sesionCon } from "@/lib/sesion";
+import { SIN_PERMISO } from "@/lib/permisos";
 import { traducirErrorDb } from "@/lib/db-errores";
 import { entero, texto, type EstadoForm } from "@/lib/formularios";
+import { normalizarPatente } from "@/lib/patentes";
 
 const PATENTE_DUPLICADA = (p: string) =>
-  `La patente ${p} ya está registrada en tu taller. Buscala en la lista de clientes antes de cargarla de nuevo.`;
-
-/** "ab 123-cd" → "AB123CD": así "AB 123 CD" y "ab123cd" cuentan como la misma patente. */
-function normalizarPatente(p: string) {
-  return p.toUpperCase().replace(/[\s.-]/g, "");
-}
+  `La patente ${p} ya está registrada en tu taller. Buscala con el buscador de patentes antes de cargarla de nuevo.`;
 
 function leerVehiculo(formData: FormData) {
   return {
@@ -71,7 +68,8 @@ export async function crearVehiculo(
   _prev: EstadoForm,
   formData: FormData,
 ): Promise<EstadoForm> {
-  const { tallerId } = await obtenerSesion();
+  const { tallerId, sinPermiso } = await sesionCon("editarClientes");
+  if (sinPermiso) return { error: SIN_PERMISO };
   const valores = leerVehiculo(formData);
   const { error, datos } = validar(valores);
   if (error || !datos) return { error, valores };
@@ -108,7 +106,8 @@ export async function actualizarVehiculo(
   _prev: EstadoForm,
   formData: FormData,
 ): Promise<EstadoForm> {
-  const { tallerId } = await obtenerSesion();
+  const { tallerId, sinPermiso } = await sesionCon("editarClientes");
+  if (sinPermiso) return { error: SIN_PERMISO };
   const valores = leerVehiculo(formData);
   const { error, datos } = validar(valores);
   if (error || !datos) return { error, valores };
@@ -122,6 +121,7 @@ export async function actualizarVehiculo(
     .from("vehiculos")
     .update(datos)
     .eq("id", id)
+    .eq("taller_id", tallerId)
     .select("id");
 
   if (dbError) {
@@ -133,10 +133,11 @@ export async function actualizarVehiculo(
 }
 
 export async function eliminarVehiculo(id: string, clienteId: string): Promise<EstadoForm> {
-  await obtenerSesion();
+  const { tallerId, sinPermiso } = await sesionCon("borrar");
+  if (sinPermiso) return { error: SIN_PERMISO };
   const supabase = await createClient();
 
-  const { data, error } = await supabase.from("vehiculos").delete().eq("id", id).select("id");
+  const { data, error } = await supabase.from("vehiculos").delete().eq("id", id).eq("taller_id", tallerId).select("id");
 
   if (error) {
     return {

@@ -2,39 +2,148 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { obtenerSesion } from "@/lib/sesion";
-import { ESTADOS_ABIERTOS } from "@/lib/ordenes";
+import { puede } from "@/lib/permisos";
+import { obtenerEquipo } from "@/lib/equipo";
+import { ESTADOS_ABIERTOS, hoyISO } from "@/lib/ordenes";
+import { contarPendientes, obtenerRecordatorios } from "@/lib/recordatorios";
+import { obtenerPresupuestosPendientes } from "@/lib/presupuestos-pendientes";
+import { obtenerResumenes } from "@/lib/resumen-clientes";
+import { aFilasSeguimiento, seguimientosPendientes } from "@/lib/seguimientos";
 import ListaOrdenes from "@/components/lista-ordenes";
-import { BotonLink, Tarjeta } from "@/components/ui";
+import ListaPresupuestos from "@/components/lista-presupuestos";
+import ListaSeguimientos from "@/components/lista-seguimientos";
+import { Tarjeta } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Inicio" };
 
+/** Tarjeta-contador del panel. `alerta` la resalta cuando hay algo para hacer. */
+function Indicador({
+  href,
+  titulo,
+  valor,
+  detalle,
+  alerta,
+}: {
+  href: string;
+  titulo: string;
+  valor: number | null;
+  detalle: string;
+  alerta: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`flex flex-col justify-between gap-2 rounded-2xl border p-4 shadow-sm transition ${
+        alerta ? "border-amber-200 bg-amber-50 hover:bg-amber-100" : "border-slate-200 bg-white hover:bg-slate-50"
+      }`}
+    >
+      <p className="text-sm font-semibold text-slate-700">{titulo}</p>
+      <p className={`text-3xl font-bold ${alerta ? "text-amber-700" : "text-slate-400"}`}>{valor ?? "—"}</p>
+      <p className="text-xs text-slate-500">{detalle}</p>
+    </Link>
+  );
+}
+
 export default async function InicioPage() {
-  const { usuario, taller } = await obtenerSesion();
+  const { usuario, taller, tallerId, rol } = await obtenerSesion();
   const supabase = await createClient();
+  const hoy = hoyISO();
+  const nombreTaller = taller?.nombre ?? "el taller";
+  const puedeContactar = puede(rol, "contactarClientes");
 
-  const { data: abiertas } = await supabase
-    .from("ordenes_trabajo")
-    .select("id, fecha, estado, descripcion, total, vehiculos(patente, marca, modelo, clientes(nombre))")
-    .in("estado", ESTADOS_ABIERTOS)
-    .order("fecha", { ascending: true }) // las más viejas primero: son las más urgentes
-    .limit(50);
+  // Cada bloque falla por separado: si falta una migración, el resto del panel igual se ve.
+  const [abiertas, recordatorios, presupuestos, resumenes, seguimientos, equipo] = await Promise.all([
+    supabase
+      .from("ordenes_trabajo")
+      .select("id, fecha, estado, tipo_trabajo, descripcion, total, vehiculos(patente, marca, modelo, clientes(nombre))")
+      .eq("taller_id", tallerId)
+      .in("estado", ESTADOS_ABIERTOS)
+      .order("fecha", { ascending: true }) // las más viejas primero: son las más urgentes
+      .limit(50),
+    obtenerRecordatorios(tallerId),
+    obtenerPresupuestosPendientes(tallerId, 3),
+    obtenerResumenes(tallerId).catch(() => null),
+    seguimientosPendientes(tallerId, { hasta: hoy }),
+    obtenerEquipo(tallerId),
+  ]);
 
-  const ordenes = abiertas ?? [];
+  const ordenes = abiertas.data ?? [];
+  const recordatoriosPendientes = recordatorios.error ? null : contarPendientes(recordatorios.recordatorios);
+  const segs = seguimientos.error ? null : aFilasSeguimiento(seguimientos.data, new Map(equipo.map((u) => [u.id, u.nombre])));
+  const segsHoy = segs?.filter((s) => s.vence_en === hoy).length ?? 0;
+  const segsVencidos = segs?.filter((s) => s.vence_en < hoy).length ?? 0;
+  const segmentos = resumenes ? [...resumenes.values()].map((r) => r.segmento) : null;
+  const enRiesgo = segmentos?.filter((s) => s === "en_riesgo").length ?? null;
+  const inactivos = segmentos?.filter((s) => s === "inactivo").length ?? 0;
 
   return (
     <div className="space-y-6">
-      <Tarjeta className="p-6">
+      <div>
         <h1 className="text-2xl font-bold text-slate-900">¡Hola, {usuario.nombre}!</h1>
-        <p className="mt-1 text-slate-600">
-          Panel de <span className="font-semibold">{taller?.nombre}</span>
+        <p className="text-slate-600">
+          Panel de <span className="font-semibold">{nombreTaller}</span>
         </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <BotonLink href="/clientes">Clientes</BotonLink>
-          <BotonLink href="/ordenes" variante="secundario">
-            Todas las órdenes
-          </BotonLink>
-        </div>
-      </Tarjeta>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Indicador
+          href="/seguimientos?filtro=hoy"
+          titulo="Seguimientos de hoy"
+          valor={segs ? segsHoy : null}
+          detalle={segsVencidos ? `Y ${segsVencidos} vencidos` : "Ninguno vencido"}
+          alerta={segsHoy + segsVencidos > 0}
+        />
+        <Indicador
+          href="/presupuestos"
+          titulo="Presupuestos pendientes"
+          valor={presupuestos.error ? null : presupuestos.total}
+          detalle="Sin respuesta hace más de 3 días"
+          alerta={presupuestos.total > 0}
+        />
+        <Indicador
+          href="/recordatorios"
+          titulo="Recordatorios pendientes"
+          valor={recordatoriosPendientes}
+          detalle="Service, VTV y seguro para avisar"
+          alerta={(recordatoriosPendientes ?? 0) > 0}
+        />
+        <Indicador
+          href="/reactivacion?filtro=en_riesgo"
+          titulo="Clientes en riesgo"
+          valor={enRiesgo}
+          detalle={`6 a 12 meses sin venir · ${inactivos} inactivos`}
+          alerta={(enRiesgo ?? 0) > 0}
+        />
+      </div>
+
+      {segs && segs.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-lg font-semibold text-slate-900">Para hacer hoy</h2>
+            <Link href="/seguimientos" className="text-sm font-medium text-blue-600 hover:underline">
+              Ver todos
+            </Link>
+          </div>
+          <ListaSeguimientos seguimientos={segs.slice(0, 8)} taller={nombreTaller} puedeGestionar={puedeContactar} />
+        </section>
+      )}
+
+      {presupuestos.presupuestos.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-lg font-semibold text-slate-900">Presupuestos sin respuesta</h2>
+            <Link href="/presupuestos" className="text-sm font-medium text-blue-600 hover:underline">
+              Ver todos ({presupuestos.total})
+            </Link>
+          </div>
+          <ListaPresupuestos
+            presupuestos={presupuestos.presupuestos}
+            taller={nombreTaller}
+            puedeContactar={puedeContactar}
+            equipo={equipo.filter((u) => u.activo)}
+          />
+        </section>
+      )}
 
       <section className="space-y-3">
         <div className="flex items-baseline justify-between gap-3">
@@ -46,9 +155,7 @@ export default async function InicioPage() {
           </Link>
         </div>
         {ordenes.length === 0 ? (
-          <Tarjeta className="text-center text-slate-600">
-            No hay órdenes presupuestadas ni en proceso.
-          </Tarjeta>
+          <Tarjeta className="text-center text-slate-600">No hay órdenes presupuestadas ni en proceso.</Tarjeta>
         ) : (
           <ListaOrdenes ordenes={ordenes} mostrarVehiculo />
         )}

@@ -10,6 +10,8 @@ export function traducirErrorAuth(error: AuthError): string {
     case "user_already_exists":
     case "email_exists":
       return "Ya existe una cuenta con ese email. Probá iniciar sesión.";
+    case "same_password":
+      return "La nueva contraseña tiene que ser distinta a la anterior.";
     case "weak_password":
       return "La contraseña es muy débil. Usá al menos 6 caracteres, combinando letras y números.";
     case "email_address_invalid":

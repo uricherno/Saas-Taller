@@ -1,6 +1,6 @@
 import Link from "next/link";
 import EtiquetaEstado from "@/components/etiqueta-estado";
-import { formatoFecha, formatoPesos } from "@/lib/ordenes";
+import { formatoFecha, formatoPesos, labelTipoTrabajo } from "@/lib/ordenes";
 
 type UnoOVarios<T> = T | T[] | null | undefined;
 
@@ -13,6 +13,7 @@ export type FilaOrden = {
   id: string;
   fecha: string;
   estado: string;
+  tipo_trabajo?: string | null;
   descripcion: string | null;
   total: number | string | null;
   vehiculos?: UnoOVarios<{
@@ -46,6 +47,9 @@ export default function ListaOrdenes({
                     </span>
                   )}
                   <span className="text-sm text-slate-500">{formatoFecha(o.fecha)}</span>
+                  {o.tipo_trabajo && (
+                    <span className="truncate text-xs font-medium text-slate-600">· {labelTipoTrabajo(o.tipo_trabajo)}</span>
+                  )}
                 </div>
                 <EtiquetaEstado estado={o.estado} />
               </div>

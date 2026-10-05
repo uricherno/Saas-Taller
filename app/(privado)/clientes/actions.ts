@@ -2,15 +2,30 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { obtenerSesion } from "@/lib/sesion";
+import { sesionCon } from "@/lib/sesion";
+import { SIN_PERMISO } from "@/lib/permisos";
 import { traducirErrorDb } from "@/lib/db-errores";
 import { texto, type EstadoForm } from "@/lib/formularios";
+import { normalizarEtiquetas } from "@/lib/crm";
 
 function leerCliente(formData: FormData) {
   return {
     nombre: texto(formData, "nombre"),
     telefono: texto(formData, "telefono"),
     notas: texto(formData, "notas"),
+    origen: texto(formData, "origen"),
+    etiquetas: texto(formData, "etiquetas"),
+  };
+}
+
+/** Columnas a guardar (origen vacío → null, etiquetas normalizadas). */
+function columnas(c: ReturnType<typeof leerCliente>) {
+  return {
+    nombre: c.nombre,
+    telefono: c.telefono || null,
+    notas: c.notas || null,
+    origen: c.origen || null,
+    etiquetas: normalizarEtiquetas(c.etiquetas),
   };
 }
 
@@ -20,11 +35,13 @@ function validar(c: ReturnType<typeof leerCliente>): string | null {
   if (c.telefono && !/^[\d\s+()-]{6,25}$/.test(c.telefono)) {
     return "El teléfono solo puede tener números, espacios, +, guiones o paréntesis.";
   }
+  if (c.origen.length > 60) return "El origen es demasiado largo.";
   return null;
 }
 
 export async function crearCliente(_prev: EstadoForm, formData: FormData): Promise<EstadoForm> {
-  const { tallerId } = await obtenerSesion();
+  const { tallerId, sinPermiso } = await sesionCon("editarClientes");
+  if (sinPermiso) return { error: SIN_PERMISO };
   const c = leerCliente(formData);
   const error = validar(c);
   if (error) return { error, valores: c };
@@ -34,9 +51,7 @@ export async function crearCliente(_prev: EstadoForm, formData: FormData): Promi
     .from("clientes")
     .insert({
       taller_id: tallerId, // siempre el taller del usuario logueado
-      nombre: c.nombre,
-      telefono: c.telefono || null,
-      notas: c.notas || null,
+      ...columnas(c),
     })
     .select("id")
     .single();
@@ -51,7 +66,8 @@ export async function actualizarCliente(
   _prev: EstadoForm,
   formData: FormData,
 ): Promise<EstadoForm> {
-  await obtenerSesion();
+  const { tallerId, sinPermiso } = await sesionCon("editarClientes");
+  if (sinPermiso) return { error: SIN_PERMISO };
   const c = leerCliente(formData);
   const error = validar(c);
   if (error) return { error, valores: c };
@@ -59,8 +75,9 @@ export async function actualizarCliente(
   const supabase = await createClient();
   const { data, error: dbError } = await supabase
     .from("clientes")
-    .update({ nombre: c.nombre, telefono: c.telefono || null, notas: c.notas || null })
+    .update(columnas(c))
     .eq("id", id)
+    .eq("taller_id", tallerId)
     .select("id");
 
   if (dbError) return { error: traducirErrorDb(dbError), valores: c };
@@ -71,13 +88,15 @@ export async function actualizarCliente(
 }
 
 export async function eliminarCliente(id: string): Promise<EstadoForm> {
-  await obtenerSesion();
+  const { tallerId, sinPermiso } = await sesionCon("borrar");
+  if (sinPermiso) return { error: SIN_PERMISO };
   const supabase = await createClient();
 
   const { count } = await supabase
     .from("vehiculos")
     .select("id", { count: "exact", head: true })
-    .eq("cliente_id", id);
+    .eq("cliente_id", id)
+    .eq("taller_id", tallerId);
 
   if (count) {
     return {
@@ -85,7 +104,7 @@ export async function eliminarCliente(id: string): Promise<EstadoForm> {
     };
   }
 
-  const { data, error } = await supabase.from("clientes").delete().eq("id", id).select("id");
+  const { data, error } = await supabase.from("clientes").delete().eq("id", id).eq("taller_id", tallerId).select("id");
 
   if (error) {
     return {

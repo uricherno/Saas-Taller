@@ -5,7 +5,12 @@ import { useActionState } from "react";
 import { registrarse, type EstadoForm } from "../actions";
 import { Alerta, BotonEnviar, Campo } from "@/components/ui";
 
-export default function FormRegistro() {
+/** Con `invitacion`, la persona se une a un taller existente: no se pide nombre de taller. */
+export default function FormRegistro({
+  invitacion,
+}: {
+  invitacion?: { token: string; email: string; tallerNombre: string; rolLabel: string };
+}) {
   const [estado, accion, cargando] = useActionState<EstadoForm, FormData>(registrarse, {});
 
   if (estado.exito) {
@@ -27,14 +32,26 @@ export default function FormRegistro() {
   return (
     <form action={accion} className="space-y-4">
       {estado.error && <Alerta tipo="error">{estado.error}</Alerta>}
-      <Campo
-        label="Nombre del taller"
-        name="taller_nombre"
-        autoComplete="organization"
-        required
-        defaultValue={v?.taller_nombre}
-        placeholder="Ej: Taller Mecánico Rodríguez"
-      />
+
+      {invitacion ? (
+        <>
+          <input type="hidden" name="invitacion" value={invitacion.token} />
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+            Te vas a unir a <span className="font-semibold">{invitacion.tallerNombre}</span> como{" "}
+            <span className="font-semibold">{invitacion.rolLabel}</span>.
+          </div>
+        </>
+      ) : (
+        <Campo
+          label="Nombre del taller"
+          name="taller_nombre"
+          autoComplete="organization"
+          required
+          defaultValue={v?.taller_nombre}
+          placeholder="Ej: Taller Mecánico Rodríguez"
+        />
+      )}
+
       <Campo
         label="Tu nombre"
         name="nombre"
@@ -50,7 +67,9 @@ export default function FormRegistro() {
         autoComplete="email"
         inputMode="email"
         required
-        defaultValue={v?.email}
+        // La invitación es para un email puntual.
+        readOnly={Boolean(invitacion)}
+        defaultValue={invitacion?.email ?? v?.email}
         placeholder="tu@email.com"
       />
       <Campo
@@ -62,7 +81,26 @@ export default function FormRegistro() {
         required
         placeholder="Mínimo 6 caracteres"
       />
-      <BotonEnviar cargando={cargando}>Crear cuenta</BotonEnviar>
+      <label className="flex items-start gap-2 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          name="acepto"
+          required
+          className="mt-0.5 h-5 w-5 shrink-0 rounded border-slate-300 accent-blue-600"
+        />
+        <span>
+          Leí y acepto los{" "}
+          <Link href="/terminos" target="_blank" className="font-medium text-blue-600 underline">
+            Términos y condiciones
+          </Link>{" "}
+          y la{" "}
+          <Link href="/privacidad" target="_blank" className="font-medium text-blue-600 underline">
+            Política de privacidad
+          </Link>
+          .
+        </span>
+      </label>
+      <BotonEnviar cargando={cargando}>{invitacion ? "Unirme al taller" : "Crear cuenta"}</BotonEnviar>
     </form>
   );
 }

@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { obtenerSesion } from "@/lib/sesion";
+import { sesionCon } from "@/lib/sesion";
+import { SIN_PERMISO } from "@/lib/permisos";
 import { traducirErrorDb } from "@/lib/db-errores";
 import { decimal, entero, texto, type EstadoForm } from "@/lib/formularios";
-import { ESTADOS_CERRADOS, esEstado, esTipoItem, type Estado } from "@/lib/ordenes";
+import { esEstado, esTipoItem, esTipoTrabajo, type Estado } from "@/lib/ordenes";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -15,6 +16,7 @@ type Supabase = Awaited<ReturnType<typeof createClient>>;
 function leerOrden(formData: FormData) {
   return {
     fecha: texto(formData, "fecha"),
+    tipo_trabajo: texto(formData, "tipo_trabajo"),
     km_ingreso: texto(formData, "km_ingreso"),
     descripcion: texto(formData, "descripcion"),
     estado: texto(formData, "estado"),
@@ -28,6 +30,7 @@ const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
 function validarOrden(v: ReturnType<typeof leerOrden>) {
   if (!FECHA_RE.test(v.fecha)) return { error: "Elegí la fecha de la orden." };
   if (!esEstado(v.estado)) return { error: "Elegí un estado válido." };
+  if (!esTipoTrabajo(v.tipo_trabajo)) return { error: "Elegí el tipo de trabajo." };
 
   const km = entero(v.km_ingreso);
   if (km !== null && (Number.isNaN(km) || km > 3_000_000)) {
@@ -52,6 +55,7 @@ function validarOrden(v: ReturnType<typeof leerOrden>) {
   return {
     datos: {
       fecha: v.fecha,
+      tipo_trabajo: v.tipo_trabajo,
       km_ingreso: km,
       descripcion: v.descripcion || null,
       estado: v.estado as Estado,
@@ -61,42 +65,28 @@ function validarOrden(v: ReturnType<typeof leerOrden>) {
   };
 }
 
-/**
- * Si la orden está terminada o entregada y el km de ingreso es mayor
- * al guardado en el vehículo, actualiza km_actual.
- */
-async function actualizarKmVehiculo(
-  supabase: Supabase,
-  vehiculoId: string,
-  estado: Estado,
-  km: number | null,
-) {
-  if (km === null || !ESTADOS_CERRADOS.includes(estado)) return;
-
-  const { data: vehiculo } = await supabase
-    .from("vehiculos")
-    .select("km_actual")
-    .eq("id", vehiculoId)
-    .maybeSingle();
-
-  if (vehiculo && (vehiculo.km_actual == null || km > vehiculo.km_actual)) {
-    await supabase.from("vehiculos").update({ km_actual: km }).eq("id", vehiculoId);
-  }
-}
+// El km_actual del vehículo lo actualiza la base (trigger ordenes_actualizar_km)
+// al guardar una orden terminada o entregada: el mecánico no puede editar vehículos.
 
 export async function crearOrden(
   vehiculoId: string,
   _prev: EstadoForm,
   formData: FormData,
 ): Promise<EstadoForm> {
-  const { tallerId } = await obtenerSesion();
+  const { tallerId, sinPermiso } = await sesionCon("editarOrdenes");
+  if (sinPermiso) return { error: SIN_PERMISO };
   const valores = leerOrden(formData);
   const { error, datos } = validarOrden(valores);
   if (error || !datos) return { error, valores };
 
   const supabase = await createClient();
 
-  const { data: vehiculo } = await supabase.from("vehiculos").select("id").eq("id", vehiculoId).maybeSingle();
+  const { data: vehiculo } = await supabase
+    .from("vehiculos")
+    .select("id")
+    .eq("id", vehiculoId)
+    .eq("taller_id", tallerId)
+    .maybeSingle();
   if (!vehiculo) return { error: "No se encontró el vehículo.", valores };
 
   const { data, error: dbError } = await supabase
@@ -107,8 +97,6 @@ export async function crearOrden(
 
   if (dbError) return { error: traducirErrorDb(dbError), valores };
 
-  await actualizarKmVehiculo(supabase, vehiculoId, datos.estado, datos.km_ingreso);
-
   // Ir al detalle para cargar los repuestos y la mano de obra.
   redirect(`/ordenes/${data.id}`);
 }
@@ -118,7 +106,8 @@ export async function actualizarOrden(
   _prev: EstadoForm,
   formData: FormData,
 ): Promise<EstadoForm> {
-  await obtenerSesion();
+  const { tallerId, sinPermiso } = await sesionCon("editarOrdenes");
+  if (sinPermiso) return { error: SIN_PERMISO };
   const valores = leerOrden(formData);
   const { error, datos } = validarOrden(valores);
   if (error || !datos) return { error, valores };
@@ -128,25 +117,25 @@ export async function actualizarOrden(
     .from("ordenes_trabajo")
     .update(datos)
     .eq("id", id)
-    .select("vehiculo_id");
+    .eq("taller_id", tallerId)
+    .select("id");
 
   if (dbError) return { error: traducirErrorDb(dbError), valores };
   if (!data?.length) return { error: "No se encontró la orden.", valores };
-
-  await actualizarKmVehiculo(supabase, data[0].vehiculo_id, datos.estado, datos.km_ingreso);
 
   redirect(`/ordenes/${id}`);
 }
 
 export async function eliminarOrden(id: string, vehiculoId: string): Promise<EstadoForm> {
-  await obtenerSesion();
+  const { tallerId, sinPermiso } = await sesionCon("borrar");
+  if (sinPermiso) return { error: SIN_PERMISO };
   const supabase = await createClient();
 
   // Primero los items, por si la base no los borra en cascada.
-  const { error: errorItems } = await supabase.from("items_orden").delete().eq("orden_id", id);
+  const { error: errorItems } = await supabase.from("items_orden").delete().eq("orden_id", id).eq("taller_id", tallerId);
   if (errorItems) return { error: traducirErrorDb(errorItems) };
 
-  const { data, error } = await supabase.from("ordenes_trabajo").delete().eq("id", id).select("id");
+  const { data, error } = await supabase.from("ordenes_trabajo").delete().eq("id", id).eq("taller_id", tallerId).select("id");
   if (error) return { error: traducirErrorDb(error) };
   if (!data?.length) return { error: "No se pudo eliminar la orden." };
 
@@ -183,7 +172,8 @@ export async function agregarItem(
   _prev: EstadoForm,
   formData: FormData,
 ): Promise<EstadoForm> {
-  const { tallerId } = await obtenerSesion();
+  const { tallerId, sinPermiso } = await sesionCon("editarOrdenes");
+  if (sinPermiso) return { error: SIN_PERMISO };
   const valores = {
     tipo: texto(formData, "tipo"),
     descripcion: texto(formData, "descripcion"),
@@ -227,9 +217,10 @@ export async function agregarItem(
 }
 
 export async function quitarItem(itemId: string, ordenId: string): Promise<void> {
-  await obtenerSesion();
+  const { tallerId, sinPermiso } = await sesionCon("editarOrdenes");
+  if (sinPermiso) return;
   const supabase = await createClient();
-  await supabase.from("items_orden").delete().eq("id", itemId);
+  await supabase.from("items_orden").delete().eq("id", itemId).eq("taller_id", tallerId);
   await recalcularTotal(supabase, ordenId);
   revalidatePath(`/ordenes/${ordenId}`);
 }

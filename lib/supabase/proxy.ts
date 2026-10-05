@@ -1,8 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const RUTAS_PUBLICAS_AUTH = ["/login", "/registro"];
-const RUTAS_PRIVADAS = ["/inicio", "/clientes", "/vehiculos", "/ordenes"];
+// Con sesión iniciada, estas redirigen a /inicio. (/nueva-clave no está: la usa la sesión de recuperación.)
+const RUTAS_PUBLICAS_AUTH = ["/login", "/registro", "/recuperar"];
+const RUTAS_PRIVADAS = [
+  "/inicio", "/clientes", "/vehiculos", "/ordenes", "/seguimientos", "/presupuestos",
+  "/recordatorios", "/reactivacion", "/ajustes", "/equipo",
+];
 
 function empiezaCon(pathname: string, rutas: string[]) {
   return rutas.some((r) => pathname === r || pathname.startsWith(`${r}/`));
@@ -57,7 +61,10 @@ export async function updateSession(request: NextRequest) {
     return redirigir("/login");
   }
 
-  if (user && (pathname === "/" || empiezaCon(pathname, RUTAS_PUBLICAS_AUTH))) {
+  // El enlace de invitación se muestra aunque haya sesión: la página ofrece cerrarla.
+  const esInvitacion = pathname === "/registro" && request.nextUrl.searchParams.has("invitacion");
+
+  if (user && !esInvitacion && (pathname === "/" || empiezaCon(pathname, RUTAS_PUBLICAS_AUTH))) {
     return redirigir("/inicio");
   }
 

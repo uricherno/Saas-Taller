@@ -5,12 +5,32 @@ export const ESTADOS = [
   { valor: "en_proceso", label: "En proceso", color: "bg-blue-100 text-blue-800" },
   { valor: "terminado", label: "Terminado", color: "bg-green-100 text-green-800" },
   { valor: "entregado", label: "Entregado", color: "bg-slate-200 text-slate-700" },
+  { valor: "cancelado", label: "Cancelado", color: "bg-red-100 text-red-700" },
 ] as const;
 
 export type Estado = (typeof ESTADOS)[number]["valor"];
 
+/** Abiertas: aparecen en /inicio. Las canceladas no están acá. */
 export const ESTADOS_ABIERTOS: Estado[] = ["presupuestado", "en_proceso"];
+/** Cerradas: cuentan para recordatorios y actualizan el km. Las canceladas no están acá. */
 export const ESTADOS_CERRADOS: Estado[] = ["terminado", "entregado"];
+
+export const TIPOS_TRABAJO = [
+  { valor: "service", label: "Service" },
+  { valor: "reparacion", label: "Reparación" },
+  { valor: "diagnostico", label: "Diagnóstico" },
+  { valor: "otro", label: "Otro" },
+] as const;
+
+export type TipoTrabajo = (typeof TIPOS_TRABAJO)[number]["valor"];
+
+export function esTipoTrabajo(v: string): v is TipoTrabajo {
+  return TIPOS_TRABAJO.some((t) => t.valor === v);
+}
+
+export function labelTipoTrabajo(v: string | null | undefined) {
+  return TIPOS_TRABAJO.find((t) => t.valor === v)?.label ?? v ?? "";
+}
 
 export const TIPOS_ITEM = [
   { valor: "repuesto", label: "Repuesto" },

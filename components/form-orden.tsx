@@ -2,11 +2,12 @@
 
 import { useActionState } from "react";
 import type { EstadoForm } from "@/lib/formularios";
-import { ESTADOS } from "@/lib/ordenes";
+import { ESTADOS, TIPOS_TRABAJO } from "@/lib/ordenes";
 import { Alerta, AreaTexto, BotonEnviar, BotonLink, Campo, Selector } from "@/components/ui";
 
 type Orden = {
   fecha: string;
+  tipo_trabajo: string;
   km_ingreso: number | null;
   descripcion: string | null;
   estado: string;
@@ -28,6 +29,7 @@ export default function FormOrden({
   const [estado, enviar, cargando] = useActionState(accion, {});
   const v = estado.valores ?? {
     fecha: inicial.fecha,
+    tipo_trabajo: inicial.tipo_trabajo ?? "service",
     km_ingreso: inicial.km_ingreso?.toString() ?? "",
     descripcion: inicial.descripcion ?? "",
     estado: inicial.estado ?? "presupuestado",
@@ -44,14 +46,17 @@ export default function FormOrden({
         <Selector label="Estado" name="estado" opciones={ESTADOS} defaultValue={v.estado} />
       </div>
 
-      <Campo
-        label="Kilometraje de ingreso"
-        opcional
-        name="km_ingreso"
-        inputMode="numeric"
-        defaultValue={v.km_ingreso}
-        placeholder="Ej: 85000"
-      />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Selector label="Tipo de trabajo" name="tipo_trabajo" opciones={TIPOS_TRABAJO} defaultValue={v.tipo_trabajo} />
+        <Campo
+          label="Kilometraje de ingreso"
+          opcional
+          name="km_ingreso"
+          inputMode="numeric"
+          defaultValue={v.km_ingreso}
+          placeholder="Ej: 85000"
+        />
+      </div>
 
       <AreaTexto
         label="Descripción del trabajo"
