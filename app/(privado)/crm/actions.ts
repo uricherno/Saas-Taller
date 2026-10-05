@@ -179,3 +179,24 @@ export async function borrarVencimiento(id: string): Promise<EstadoForm> {
   refrescar();
   return {};
 }
+
+/** Registra en la ficha del cliente que se le mandó el PDF del presupuesto. */
+export async function registrarPresupuestoEnviado(datos: {
+  clienteId: string;
+  vehiculoId?: string | null;
+  texto: string;
+}): Promise<{ error?: string }> {
+  const { tallerId, sinPermiso } = await sesionCon("contactarClientes");
+  if (sinPermiso) return {}; // el mecánico puede compartir el PDF, pero no se registra
+  const supabase = await createClient();
+  const { error } = await supabase.from("interacciones").insert({
+    taller_id: tallerId,
+    cliente_id: datos.clienteId,
+    vehiculo_id: datos.vehiculoId ?? null,
+    tipo: "presupuesto",
+    texto: datos.texto.slice(0, 4000),
+  });
+  if (error) return { error: "No se pudo registrar el envío en la ficha del cliente." };
+  refrescar();
+  return {};
+}

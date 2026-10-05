@@ -12,6 +12,8 @@ import { obtenerEquipo } from "@/lib/equipo";
 import { aFilasSeguimiento, seguimientosPendientes } from "@/lib/seguimientos";
 import BotonEliminar from "@/components/boton-eliminar";
 import BotonWhatsapp from "@/components/boton-whatsapp";
+import BotonesPdf from "@/components/botones-pdf";
+import BotonActualizarPrecios from "@/components/boton-actualizar-precios";
 import ListaSeguimientos from "@/components/lista-seguimientos";
 import { NuevoSeguimiento } from "@/components/crm";
 import BotonImprimir from "@/components/boton-imprimir";
@@ -28,6 +30,10 @@ type Item = {
   descripcion: string;
   cantidad: number | string;
   precio_unitario: number | string;
+  codigo: string | null;
+  precio_id: string | null;
+  /** Precio vigente en la lista (si el ítem salió de la lista). */
+  precios: { precio: number | string } | { precio: number | string }[] | null;
 };
 
 function subtotal(i: Pick<Item, "cantidad" | "precio_unitario">) {
@@ -52,7 +58,7 @@ export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) 
       .select(
         `id, fecha, tipo_trabajo, km_ingreso, descripcion, estado, total, proximo_service_fecha, proximo_service_km,
          vehiculos(id, patente, marca, modelo, anio, clientes(id, nombre, telefono)),
-         items_orden(id, tipo, descripcion, cantidad, precio_unitario)`,
+         items_orden(id, tipo, descripcion, cantidad, precio_unitario, codigo, precio_id, precios(precio))`,
       )
       .eq("id", id)
       .eq("taller_id", tallerId)
@@ -75,6 +81,12 @@ export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) 
   const vehiculo = Array.isArray(orden.vehiculos) ? orden.vehiculos[0] : orden.vehiculos;
   const cliente = vehiculo ? (Array.isArray(vehiculo.clientes) ? vehiculo.clientes[0] : vehiculo.clientes) : null;
   const items: Item[] = orden.items_orden ?? [];
+  // Items de la lista cuyo precio cambió desde que se cargaron en esta orden.
+  const desactualizados = items.filter((i) => {
+    const lista = Array.isArray(i.precios) ? i.precios[0] : i.precios;
+    return lista && Number(lista.precio) !== Number(i.precio_unitario);
+  });
+  const ordenAbierta = orden.estado === "presupuestado" || orden.estado === "en_proceso";
 
   const totalRepuestos = items.filter((i) => i.tipo === "repuesto").reduce((a, i) => a + subtotal(i), 0);
   const totalManoObra = items.filter((i) => i.tipo !== "repuesto").reduce((a, i) => a + subtotal(i), 0);
@@ -113,6 +125,13 @@ export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) 
               Enviar presupuesto por WhatsApp
             </BotonWhatsapp>
           )}
+          <BotonesPdf
+            ordenId={id}
+            nombreArchivo={`${orden.estado === "presupuestado" ? "presupuesto" : "orden"}-${vehiculo?.patente ?? id.slice(0, 8)}-${orden.fecha}.pdf`}
+            clienteId={cliente?.id ?? null}
+            vehiculoId={vehiculo?.id ?? null}
+            titulo={titulo}
+          />
           <BotonImprimir />
           <BotonLink href={`/ordenes/${id}/editar`} variante="secundario">
             Editar orden
@@ -130,6 +149,19 @@ export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) 
           </p>
         )}
       </div>
+
+      {ordenAbierta && desactualizados.length > 0 && (
+        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 print:hidden">
+          <p>
+            <strong>
+              {desactualizados.length === 1 ? "1 ítem tiene" : `${desactualizados.length} ítems tienen`} un precio distinto al
+              de la lista de precios actual
+            </strong>{" "}
+            (la lista se actualizó después de armar esta orden, o se cambió el precio a mano).
+          </p>
+          {puede(rol, "editarOrdenes") && <BotonActualizarPrecios ordenId={id} />}
+        </div>
+      )}
 
       {/* Documento: es lo que se imprime o se le muestra al cliente */}
       <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8 print:rounded-none print:border-0 print:p-0 print:shadow-none">
@@ -201,6 +233,7 @@ export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) 
                   <tr key={i.id} className="align-top">
                     <td className="py-2 pr-2">
                       <span className="text-slate-900">{i.descripcion}</span>
+                      {i.codigo && <span className="ml-1 font-mono text-xs text-slate-400">{i.codigo}</span>}
                       <span className="block text-xs text-slate-500">
                         {labelTipo(i.tipo)}
                         {/* En celular, cantidad × precio debajo de la descripción */}
@@ -301,6 +334,13 @@ export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) 
       <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm print:hidden">
         <h2 className="font-semibold text-slate-900">Agregar repuesto o mano de obra</h2>
         <FormItem accion={agregarItem.bind(null, id)} />
+        <p className="text-xs text-slate-500">
+          ¿Falta algo en la lista? Revisala en{" "}
+          <Link href="/precios" className="font-medium text-blue-600 hover:underline">
+            Precios
+          </Link>
+          .
+        </p>
       </section>
 
       {puedeBorrar && (

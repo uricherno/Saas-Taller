@@ -30,6 +30,8 @@ export function generarCsv(encabezados: string[], filas: Celda[][]): string {
 /** "2026-10-05" → "05/10/2026" */
 export function fechaCsv(iso: string | null | undefined): string {
   if (!iso) return "";
-  const [a, m, d] = iso.slice(0, 10).split("-");
+  // Las fechas con hora vienen en UTC: se pasan al día de Argentina (si no, de noche sale el día siguiente).
+  const dia = iso.length > 10 ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }) : iso;
+  const [a, m, d] = dia.slice(0, 10).split("-");
   return `${d}/${m}/${a}`;
 }

@@ -195,8 +195,27 @@ export async function agregarItem(
 
   const supabase = await createClient();
 
-  const { data: orden } = await supabase.from("ordenes_trabajo").select("id").eq("id", ordenId).maybeSingle();
+  const { data: orden } = await supabase
+    .from("ordenes_trabajo")
+    .select("id")
+    .eq("id", ordenId)
+    .eq("taller_id", tallerId)
+    .maybeSingle();
   if (!orden) return { error: "No se encontró la orden.", valores };
+
+  // Si el ítem salió de la lista de precios, se guarda el vínculo y el código
+  // (leídos de la base, no de lo que manda el navegador).
+  const precioId = texto(formData, "precio_id");
+  let deLista: { id: string; codigo: string } | null = null;
+  if (/^[0-9a-f-]{36}$/i.test(precioId)) {
+    const { data } = await supabase
+      .from("precios")
+      .select("id, codigo")
+      .eq("id", precioId)
+      .eq("taller_id", tallerId)
+      .maybeSingle();
+    deLista = data;
+  }
 
   const { error } = await supabase.from("items_orden").insert({
     taller_id: tallerId,
@@ -205,6 +224,8 @@ export async function agregarItem(
     descripcion: valores.descripcion,
     cantidad,
     precio_unitario: precio,
+    precio_id: deLista?.id ?? null,
+    codigo: deLista?.codigo ?? null,
   });
   if (error) return { error: traducirErrorDb(error), valores };
 
@@ -223,4 +244,39 @@ export async function quitarItem(itemId: string, ordenId: string): Promise<void>
   await supabase.from("items_orden").delete().eq("id", itemId).eq("taller_id", tallerId);
   await recalcularTotal(supabase, ordenId);
   revalidatePath(`/ordenes/${ordenId}`);
+}
+
+/**
+ * Pasa los items vinculados a la lista de precios al precio vigente de la lista.
+ * Para presupuestos que quedaron viejos: los precios cambian con el tiempo.
+ */
+export async function actualizarPreciosOrden(ordenId: string): Promise<EstadoForm> {
+  const { tallerId, sinPermiso } = await sesionCon("editarOrdenes");
+  if (sinPermiso) return { error: SIN_PERMISO };
+
+  const supabase = await createClient();
+  const { data: items, error } = await supabase
+    .from("items_orden")
+    .select("id, precio_unitario, precios(precio)")
+    .eq("orden_id", ordenId)
+    .eq("taller_id", tallerId)
+    .not("precio_id", "is", null);
+  if (error) return { error: traducirErrorDb(error) };
+
+  let cambiados = 0;
+  for (const it of items ?? []) {
+    const lista = Array.isArray(it.precios) ? it.precios[0] : it.precios;
+    if (!lista || Number(lista.precio) === Number(it.precio_unitario)) continue;
+    const { error: e } = await supabase
+      .from("items_orden")
+      .update({ precio_unitario: lista.precio })
+      .eq("id", it.id)
+      .eq("taller_id", tallerId);
+    if (e) return { error: traducirErrorDb(e) };
+    cambiados++;
+  }
+
+  await recalcularTotal(supabase, ordenId);
+  revalidatePath(`/ordenes/${ordenId}`);
+  return { exito: cambiados ? `Se actualizaron ${cambiados} precios.` : "Los precios ya estaban al día." };
 }

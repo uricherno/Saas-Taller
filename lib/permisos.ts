@@ -32,6 +32,8 @@ const PERMISOS = {
   crearNotas: ["dueno", "recepcion", "mecanico"],
   /** Borrar clientes, vehículos y órdenes enteras. */
   borrar: ["dueno"],
+  /** Subir y editar la lista de precios (verla y usarla pueden todos). */
+  listaPrecios: ["dueno"],
   /** /ajustes del taller. */
   ajustes: ["dueno"],
   /** /equipo: usuarios, roles e invitaciones. */

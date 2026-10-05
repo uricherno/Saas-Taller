@@ -70,6 +70,26 @@ const EXPORTACIONES: Record<
     };
   },
 
+  // Mismas columnas que entiende la carga de /precios: se puede editar en Excel y volver a subir.
+  async precios(supabase, tallerId) {
+    type Fila = { codigo: string; descripcion: string; tipo: string; precio: number | string; activo: boolean; actualizado_en: string };
+    const datos = await todas<Fila>((d, h) =>
+      supabase
+        .from("precios")
+        .select("codigo, descripcion, tipo, precio, activo, actualizado_en")
+        .eq("taller_id", tallerId)
+        .order("descripcion")
+        .range(d, h),
+    );
+    return {
+      encabezados: ["Código", "Descripción", "Tipo", "Precio", "Activo", "Actualizado"],
+      filas: datos.map((p) => [
+        p.codigo, p.descripcion, p.tipo === "mano_de_obra" ? "Mano de obra" : "Repuesto",
+        Number(p.precio), p.activo ? "Sí" : "No", fechaCsv(p.actualizado_en),
+      ]),
+    };
+  },
+
   async ordenes(supabase, tallerId) {
     type Fila = {
       fecha: string; estado: string; tipo_trabajo: string | null; km_ingreso: number | null; descripcion: string | null;
