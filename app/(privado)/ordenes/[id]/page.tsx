@@ -12,6 +12,7 @@ import { obtenerEquipo } from "@/lib/equipo";
 import { aFilasSeguimiento, seguimientosPendientes } from "@/lib/seguimientos";
 import BotonEliminar from "@/components/boton-eliminar";
 import BotonWhatsapp from "@/components/boton-whatsapp";
+import AvisosOrden from "@/components/avisos-orden";
 import BotonesPdf from "@/components/botones-pdf";
 import BotonActualizarPrecios from "@/components/boton-actualizar-precios";
 import ListaSeguimientos from "@/components/lista-seguimientos";
@@ -302,6 +303,28 @@ export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) 
           </section>
         )}
       </article>
+      {linkPresupuesto && cliente && puedeContactar && orden.estado !== "cancelado" && (
+        <AvisosOrden
+          datos={{
+            taller: taller?.nombre ?? "el taller",
+            telefonoTaller: datosTaller?.telefono,
+            clienteNombre: cliente.nombre,
+            vehiculo,
+            descripcion: orden.descripcion,
+            total: orden.total,
+          }}
+          telefono={cliente.telefono}
+          clienteId={cliente.id}
+          vehiculoId={vehiculo?.id}
+          sugerido={
+            orden.estado === "terminado" || orden.estado === "entregado"
+              ? "listo"
+              : items.length > 0
+                ? "diagnostico"
+                : "recibido"
+          }
+        />
+      )}
 
       {cliente && (
         <section className="space-y-3 print:hidden">
