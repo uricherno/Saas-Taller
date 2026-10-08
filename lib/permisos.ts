@@ -32,6 +32,8 @@ const PERMISOS = {
   crearNotas: ["dueno", "recepcion", "mecanico"],
   /** Registrar cobros (seña y pagos) en las órdenes. Borrar un cobro es "borrar". */
   cobrar: ["dueno", "recepcion"],
+  /** Dar turnos, cambiarles el estado y recordarlos por WhatsApp. */
+  turnos: ["dueno", "recepcion"],
   /** Borrar clientes, vehículos, órdenes enteras y cobros cargados por error. */
   borrar: ["dueno"],
   /** Ver la facturación del mes y el ticket promedio en /inicio. */

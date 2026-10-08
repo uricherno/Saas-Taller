@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const RUTAS_PUBLICAS_AUTH = ["/login", "/registro", "/recuperar"];
 const RUTAS_PRIVADAS = [
   "/inicio", "/clientes", "/vehiculos", "/ordenes", "/seguimientos", "/presupuestos",
-  "/recordatorios", "/reactivacion", "/precios", "/ajustes", "/equipo", "/cobros", "/admin",
+  "/recordatorios", "/reactivacion", "/precios", "/ajustes", "/equipo", "/cobros", "/turnos", "/admin",
 ];
 
 function empiezaCon(pathname: string, rutas: string[]) {

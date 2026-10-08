@@ -11,6 +11,7 @@ const esperado: Record<Permiso, Rol[]> = {
   contactarClientes: ["dueno", "recepcion"],
   crearNotas: ["dueno", "recepcion", "mecanico"],
   cobrar: ["dueno", "recepcion"],
+  turnos: ["dueno", "recepcion"],
   borrar: ["dueno"],
   verFacturacion: ["dueno"],
   listaPrecios: ["dueno"],

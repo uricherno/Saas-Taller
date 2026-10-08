@@ -172,7 +172,14 @@ export default async function VehiculoPage({ params }: PageProps<"/vehiculos/[id
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-slate-900">Historial de órdenes</h2>
-          <BotonLink href={`/ordenes/nueva?vehiculo=${id}`}>+ Nueva orden</BotonLink>
+          <div className="flex flex-wrap gap-2">
+            {puede(rol, "turnos") && (
+              <BotonLink href={`/turnos/nuevo?vehiculo=${id}`} variante="secundario">
+                Dar turno
+              </BotonLink>
+            )}
+            <BotonLink href={`/ordenes/nueva?vehiculo=${id}`}>+ Nueva orden</BotonLink>
+          </div>
         </div>
         {errorHistorial ? (
           <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
