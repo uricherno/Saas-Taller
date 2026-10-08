@@ -43,7 +43,11 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
   const { data: esAdmin } = await supabase.rpc("soy_admin_saas");
   if (esAdmin !== true) notFound();
 
-  const { data, error } = await supabase.rpc("admin_talleres");
+  // El taller del propio admin no se puede suspender desde acá (se quedaría afuera).
+  const [{ data, error }, { data: propio }] = await Promise.all([
+    supabase.rpc("admin_talleres"),
+    supabase.from("usuarios").select("taller_id").eq("id", auth.claims.sub).maybeSingle(),
+  ]);
   const sp = await searchParams;
   const filtro = typeof sp.filtro === "string" ? sp.filtro : "todos";
   const todos = (data ?? []) as FilaTaller[];
@@ -127,7 +131,11 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
                           </p>
                         )}
                       </div>
-                      <AccionesTaller tallerId={t.id} nombre={t.nombre} suspendido={!!t.suspendido_en} />
+                      {t.id === propio?.taller_id && !t.suspendido_en ? (
+                        <span className="text-xs text-slate-500">Es tu taller</span>
+                      ) : (
+                        <AccionesTaller tallerId={t.id} nombre={t.nombre} suspendido={!!t.suspendido_en} />
+                      )}
                     </div>
                     <dl className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-6">
                       {[
