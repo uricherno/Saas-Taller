@@ -1,9 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import type { EstadoForm } from "@/lib/formularios";
 import { ESTADOS, TIPOS_TRABAJO } from "@/lib/ordenes";
+import { agregarTrabajo } from "@/lib/catalogo-fallas";
 import { Alerta, AreaTexto, BotonEnviar, BotonLink, Campo, Selector } from "@/components/ui";
+import SelectorFallas from "@/components/selector-fallas";
 
 type Orden = {
   fecha: string;
@@ -36,6 +38,8 @@ export default function FormOrden({
     proximo_service_fecha: inicial.proximo_service_fecha ?? "",
     proximo_service_km: inicial.proximo_service_km?.toString() ?? "",
   };
+  // Controlada para poder sumarle trabajos desde la lista de fallas frecuentes.
+  const [descripcion, setDescripcion] = useState(v.descripcion ?? "");
 
   return (
     <form action={enviar} className="space-y-4" key={JSON.stringify(v)}>
@@ -58,14 +62,18 @@ export default function FormOrden({
         />
       </div>
 
-      <AreaTexto
-        label="Descripción del trabajo"
-        opcional
-        name="descripcion"
-        rows={4}
-        defaultValue={v.descripcion}
-        placeholder="Ej: Cambio de aceite y filtros. Revisar ruido en tren delantero."
-      />
+      <div className="space-y-2">
+        <AreaTexto
+          label="Descripción del trabajo"
+          opcional
+          name="descripcion"
+          rows={4}
+          value={descripcion}
+          onChange={(e) => setDescripcion(e.target.value)}
+          placeholder="Ej: Cambio de aceite y filtros. Revisar ruido en tren delantero."
+        />
+        <SelectorFallas alElegir={(item) => setDescripcion((d) => agregarTrabajo(d, item))} />
+      </div>
 
       <fieldset className="rounded-xl border border-slate-200 p-4">
         <legend className="px-1 text-sm font-semibold text-slate-700">Próximo service</legend>

@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { TODAS_LAS_FALLAS } from "@/lib/catalogo-fallas";
 import { TIPOS_FOTO, type FotoOrden } from "@/lib/fotos";
 import { borrarFoto, subirFoto } from "@/app/(privado)/ordenes/fotos-actions";
 import { Selector } from "@/components/ui";
@@ -164,11 +165,18 @@ export default function FotosOrden({
             value={nota}
             onChange={(e) => setNota(e.target.value)}
             maxLength={300}
-            placeholder="Ej: rayón puerta trasera"
+            list="fallas-frecuentes"
+            placeholder={tipo === "problema" ? "Ej: pastillas gastadas" : "Ej: rayón puerta trasera"}
             className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
           />
         </label>
       </div>
+      {/* Sugerencias al escribir la nota (se puede escribir cualquier otra cosa). */}
+      <datalist id="fallas-frecuentes">
+        {TODAS_LAS_FALLAS.map((f) => (
+          <option key={f} value={f} />
+        ))}
+      </datalist>
       <label className="block">
         <span className="sr-only">Elegir fotos</span>
         <input
