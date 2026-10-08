@@ -16,6 +16,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const MENSAJE_DESACTIVADO =
   "Tu usuario está desactivado. Pedile al dueño del taller que te vuelva a activar.";
+const MENSAJE_SUSPENDIDO = "La cuenta de este taller está suspendida. Escribinos para reactivarla.";
 const MENSAJE_INVITACION_INVALIDA =
   "La invitación no es válida: ya se usó, venció o fue borrada. Pedile al dueño del taller una nueva.";
 
@@ -49,6 +50,12 @@ export async function iniciarSesion(
   if (usuario?.activo === false) {
     await supabase.auth.signOut();
     return { error: MENSAJE_DESACTIVADO, valores };
+  }
+  // Taller suspendido desde el panel de admin. (Sin la migración 20261014 la función no existe y se ignora.)
+  const { data: estado } = await supabase.rpc("estado_cuenta");
+  if (estado === "suspendido") {
+    await supabase.auth.signOut();
+    return { error: MENSAJE_SUSPENDIDO, valores };
   }
 
   redirect("/inicio");
@@ -113,6 +120,7 @@ export async function registrarse(
   if (error) {
     // El trigger rechazó la invitación (por ej. se usó justo antes).
     if (invitacion && (error.code === "unexpected_failure" || /database error/i.test(error.message))) {
+      console.error("[auth] La base rechazó el alta con invitación:", { code: error.code, message: error.message });
       return { error: MENSAJE_INVITACION_INVALIDA, valores };
     }
     return { error: traducirErrorAuth(error), valores };

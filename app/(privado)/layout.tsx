@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { obtenerSesion } from "@/lib/sesion";
+import { createClient } from "@/lib/supabase/server";
 import { labelRol, puede } from "@/lib/permisos";
 import { cerrarSesion } from "@/app/(auth)/actions";
 import BuscadorPatente from "./buscador-patente";
@@ -7,10 +8,13 @@ import Navegacion from "./navegacion";
 
 export default async function LayoutPrivado({ children }: { children: React.ReactNode }) {
   const { usuario, taller, rol } = await obtenerSesion();
+  // Administradores del SaaS (tabla admins_saas). Sin la migración 20261014 da error y no se muestra.
+  const { data: esAdmin } = await (await createClient()).rpc("soy_admin_saas");
   // Solo comodidad visual: la base de datos igual bloquea lo que el rol no puede hacer.
   const extras = [
     ...(puede(rol, "equipo") ? [{ href: "/equipo", label: "Equipo" }] : []),
     ...(puede(rol, "ajustes") ? [{ href: "/ajustes", label: "Ajustes" }] : []),
+    ...(esAdmin === true ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
   return (

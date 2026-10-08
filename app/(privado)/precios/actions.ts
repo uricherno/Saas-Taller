@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { sesionCon } from "@/lib/sesion";
 import { SIN_PERMISO } from "@/lib/permisos";
 import { traducirErrorDb } from "@/lib/db-errores";
-import { texto, type EstadoForm } from "@/lib/formularios";
+import { decimal, texto, type EstadoForm } from "@/lib/formularios";
 import { leerListaPrecios, leerPrecio, type FilaPrecio } from "@/lib/lista-precios";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
@@ -180,8 +180,21 @@ export async function guardarPrecio(id: string | null, _prev: EstadoForm, formDa
   const precio = leerPrecio(valores.precio);
   if (precio === null) return { error: "El precio tiene que ser un número (ej: 15000 o 15.000,50).", valores };
 
+  const datos: Record<string, unknown> = { codigo: valores.codigo, descripcion: valores.descripcion, tipo: valores.tipo, precio };
+  // Stock (solo si el formulario lo mostró: sin la migración 20261012 no existen las columnas).
+  if (formData.has("stock")) {
+    const stockTexto = texto(formData, "stock");
+    const minimoTexto = texto(formData, "stock_minimo");
+    Object.assign(valores, { stock: stockTexto, stock_minimo: minimoTexto });
+    const stock = decimal(stockTexto);
+    const minimo = decimal(minimoTexto);
+    if (Number.isNaN(stock) || Number.isNaN(minimo)) return { error: "El stock tiene que ser un número (ej: 4 o 2,5).", valores };
+    if (minimo !== null && stock === null) return { error: "Para avisar con stock bajo, cargá también el stock actual.", valores };
+    datos.stock = stock;
+    datos.stock_minimo = minimo;
+  }
+
   const supabase = await createClient();
-  const datos = { codigo: valores.codigo, descripcion: valores.descripcion, tipo: valores.tipo, precio };
   const { error } = id
     ? await supabase.from("precios").update(datos).eq("id", id).eq("taller_id", tallerId)
     : await supabase.from("precios").insert({ ...datos, taller_id: tallerId });

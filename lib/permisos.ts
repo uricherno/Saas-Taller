@@ -30,9 +30,13 @@ const PERMISOS = {
   contactarClientes: ["dueno", "recepcion"],
   /** Agregar notas a la línea de tiempo del cliente. */
   crearNotas: ["dueno", "recepcion", "mecanico"],
-  /** Borrar clientes, vehículos y órdenes enteras. */
+  /** Registrar cobros (seña y pagos) en las órdenes. Borrar un cobro es "borrar". */
+  cobrar: ["dueno", "recepcion"],
+  /** Borrar clientes, vehículos, órdenes enteras y cobros cargados por error. */
   borrar: ["dueno"],
-  /** Subir y editar la lista de precios (verla y usarla pueden todos). */
+  /** Ver la facturación del mes y el ticket promedio en /inicio. */
+  verFacturacion: ["dueno"],
+  /** Subir y editar la lista de precios y el stock (verla y usarla pueden todos). */
   listaPrecios: ["dueno"],
   /** /ajustes del taller. */
   ajustes: ["dueno"],

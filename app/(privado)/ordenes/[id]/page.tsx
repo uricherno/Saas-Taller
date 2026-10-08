@@ -10,6 +10,8 @@ import { mensajePresupuesto } from "@/lib/presupuesto";
 import { linkWhatsapp } from "@/lib/whatsapp";
 import { obtenerEquipo } from "@/lib/equipo";
 import { aFilasSeguimiento, seguimientosPendientes } from "@/lib/seguimientos";
+import { obtenerFotos } from "@/lib/fotos-servidor";
+import { origenActual } from "@/lib/origen";
 import BotonEliminar from "@/components/boton-eliminar";
 import BotonWhatsapp from "@/components/boton-whatsapp";
 import AvisosOrden from "@/components/avisos-orden";
@@ -18,12 +20,19 @@ import BotonActualizarPrecios from "@/components/boton-actualizar-precios";
 import ListaSeguimientos from "@/components/lista-seguimientos";
 import { NuevoSeguimiento } from "@/components/crm";
 import BotonImprimir from "@/components/boton-imprimir";
+import CobrosOrden, { type Pago } from "@/components/cobros-orden";
+import FotosOrden from "@/components/fotos-orden";
+import LinkPublico from "@/components/link-publico";
 import EtiquetaEstado from "@/components/etiqueta-estado";
 import FormItem from "@/components/form-item";
 import { BotonLink, Volver } from "@/components/ui";
 import { agregarItem, eliminarOrden, quitarItem } from "../actions";
 
 export const metadata: Metadata = { title: "Orden de trabajo" };
+
+const fechaHora = new Intl.DateTimeFormat("es-AR", {
+  timeZone: "America/Argentina/Buenos_Aires", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+});
 
 type Item = {
   id: string;
@@ -47,13 +56,14 @@ function formatoCantidad(c: number | string) {
 
 export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) {
   const { id } = await params;
-  const { tallerId, taller, rol } = await obtenerSesion();
+  const { tallerId, taller, rol, userId } = await obtenerSesion();
   const puedeBorrar = puede(rol, "borrar");
   const puedeQuitarItems = puede(rol, "editarOrdenes");
   const puedeContactar = puede(rol, "contactarClientes");
   const supabase = await createClient();
 
-  const [{ data: orden, error }, { data: datosTaller }, { data: pendientes }, equipo] = await Promise.all([
+  // Link público, cobros y fotos: si falta su migración, esa sección no se muestra.
+  const [{ data: orden, error }, { data: datosTaller }, { data: pendientes }, equipo, link, pagos, fotos] = await Promise.all([
     supabase
       .from("ordenes_trabajo")
       .select(
@@ -68,6 +78,20 @@ export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) 
     supabase.from("talleres").select("telefono").eq("id", tallerId).maybeSingle(),
     seguimientosPendientes(tallerId, { ordenId: id }),
     obtenerEquipo(tallerId),
+    supabase
+      .from("ordenes_links")
+      .select("codigo, visto_en, aceptado_en, total_aceptado")
+      .eq("orden_id", id)
+      .eq("taller_id", tallerId)
+      .maybeSingle(),
+    supabase
+      .from("pagos")
+      .select("id, fecha, monto, concepto, medio, nota")
+      .eq("orden_id", id)
+      .eq("taller_id", tallerId)
+      .order("fecha")
+      .order("creado_en"),
+    obtenerFotos(tallerId, id),
   ]);
 
   if (faltaMigracion(error)) {
@@ -107,6 +131,15 @@ export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) 
       total: orden.total,
     });
   const linkPresupuesto = linkWhatsapp(cliente?.telefono, textoPresupuesto);
+  const origen = await origenActual();
+  const datosLink = link.data
+    ? {
+        url: `${origen}/o/${link.data.codigo}`,
+        visto: link.data.visto_en ? fechaHora.format(new Date(link.data.visto_en)) : null,
+        aceptado: link.data.aceptado_en ? fechaHora.format(new Date(link.data.aceptado_en)) : null,
+        totalAceptado: link.data.total_aceptado,
+      }
+    : null;
 
   return (
     <div className="space-y-5">
@@ -150,6 +183,16 @@ export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) 
           </p>
         )}
       </div>
+
+      {datosLink?.aceptado && orden.estado === "presupuestado" && (
+        <p className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 print:hidden">
+          <strong>El cliente aceptó el presupuesto</strong> el {datosLink.aceptado}. Pasá la orden a “En proceso” desde{" "}
+          <Link href={`/ordenes/${id}/editar`} className="font-semibold underline">
+            Editar orden
+          </Link>
+          .
+        </p>
+      )}
 
       {ordenAbierta && desactualizados.length > 0 && (
         <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 print:hidden">
@@ -303,6 +346,30 @@ export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) 
           </section>
         )}
       </article>
+      {!pagos.error && (
+        <CobrosOrden
+          ordenId={id}
+          total={orden.total}
+          pagos={(pagos.data ?? []) as Pago[]}
+          puedeCobrar={puede(rol, "cobrar") && orden.estado !== "cancelado"}
+          puedeBorrar={puedeBorrar}
+          hoy={hoyISO()}
+          estado={orden.estado}
+        />
+      )}
+
+      {!link.error && orden.estado !== "cancelado" && (
+        <LinkPublico
+          ordenId={id}
+          link={datosLink}
+          puedeGestionar={puedeContactar}
+          cliente={cliente ? { id: cliente.id, telefono: cliente.telefono, vehiculoId: vehiculo?.id } : null}
+          mensaje={`Hola ${cliente?.nombre ?? ""}, te compartimos ${orden.estado === "presupuestado" ? "el presupuesto" : "la orden de trabajo"} de ${taller?.nombre ?? "el taller"}${vehiculo ? ` para tu ${[vehiculo.marca, vehiculo.modelo].filter(Boolean).join(" ") || "vehículo"} (${vehiculo.patente})` : ""}.`}
+        />
+      )}
+
+      {fotos && <FotosOrden ordenId={id} fotos={fotos} userId={userId} esDueno={puedeBorrar} />}
+
       {linkPresupuesto && cliente && puedeContactar && orden.estado !== "cancelado" && (
         <AvisosOrden
           datos={{

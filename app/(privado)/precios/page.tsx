@@ -21,23 +21,32 @@ export default async function PreciosPage({ searchParams }: PageProps<"/precios"
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const verInactivos = sp.inactivos === "1";
+  const soloStockBajo = sp.stock === "bajo";
   const pagina = Math.max(1, Number(sp.pagina) || 1);
 
   const { tallerId, rol } = await obtenerSesion();
   const puedeEditar = puede(rol, "listaPrecios");
   const supabase = await createClient();
 
-  let consulta = supabase
-    .from("precios")
-    .select("id, codigo, descripcion, tipo, precio, activo, actualizado_en", { count: "exact" })
-    .eq("taller_id", tallerId)
-    .eq("activo", !verInactivos)
-    .order("descripcion")
-    .range(0, pagina * POR_PAGINA - 1);
-  for (const filtro of filtrosBusquedaPrecios(q)) consulta = consulta.or(filtro);
+  // Sin la migración 20261012 no existen las columnas de stock: se consulta sin ellas.
+  const { data: bajos, error: errorStock } = await supabase.from("precios_stock_bajo").select("id").eq("taller_id", tallerId).limit(1000);
+  const conStock = !errorStock;
+
+  const consultar = () => {
+    let consulta = supabase
+      .from("precios")
+      .select(`id, codigo, descripcion, tipo, precio, activo, actualizado_en${conStock ? ", stock, stock_minimo" : ""}`, { count: "exact" })
+      .eq("taller_id", tallerId)
+      .eq("activo", !verInactivos)
+      .order("descripcion")
+      .range(0, pagina * POR_PAGINA - 1);
+    for (const filtro of filtrosBusquedaPrecios(q)) consulta = consulta.or(filtro);
+    if (soloStockBajo && conStock) consulta = consulta.in("id", (bajos ?? []).map((b) => b.id));
+    return consulta.overrideTypes<{ id: string; codigo: string; descripcion: string; tipo: string; precio: number | string; activo: boolean; actualizado_en: string; stock?: number | string | null; stock_minimo?: number | string | null }[], { merge: false }>();
+  };
 
   const [{ data: items, count, error }, { data: ultimaCarga }] = await Promise.all([
-    consulta,
+    consultar(),
     supabase
       .from("precios_cargas")
       .select("archivo, nuevos, actualizados, creado_en")
@@ -77,6 +86,8 @@ export default async function PreciosPage({ searchParams }: PageProps<"/precios"
     const h = porItem.get(i.id) ?? [];
     return {
       ...i,
+      stock: i.stock == null ? null : Number(i.stock),
+      stockMinimo: i.stock_minimo == null ? null : Number(i.stock_minimo),
       actualizado: fecha.format(new Date(i.actualizado_en)),
       anterior: h[1] ?? null, // h[0] es el precio vigente
       historial: h,
@@ -85,7 +96,7 @@ export default async function PreciosPage({ searchParams }: PageProps<"/precios"
 
   const url = (cambios: Record<string, string | null>) => {
     const p = new URLSearchParams();
-    const base = { q: q || null, inactivos: verInactivos ? "1" : null, ...cambios };
+    const base = { q: q || null, inactivos: verInactivos ? "1" : null, stock: soloStockBajo ? "bajo" : null, ...cambios };
     for (const [k, v] of Object.entries(base)) if (v) p.set(k, v);
     const s = p.toString();
     return s ? `/precios?${s}` : "/precios";
@@ -136,15 +147,25 @@ export default async function PreciosPage({ searchParams }: PageProps<"/precios"
               ? verInactivos ? "desactivado" : "ítem activo"
               : verInactivos ? "desactivados" : "ítems activos"}
             {q && ` con “${q}”`}
+            {soloStockBajo && " con stock bajo"}
           </p>
-          <Link href={url({ inactivos: verInactivos ? null : "1", pagina: null })} className="font-medium text-blue-600 hover:underline">
-            {verInactivos ? "Ver activos" : "Ver desactivados"}
-          </Link>
+          <span className="flex flex-wrap gap-3">
+            {conStock && (
+              <Link href={url({ stock: soloStockBajo ? null : "bajo", pagina: null })} className="font-medium text-blue-600 hover:underline">
+                {soloStockBajo ? "Ver todos" : `Stock bajo (${bajos?.length ?? 0})`}
+              </Link>
+            )}
+            <Link href={url({ inactivos: verInactivos ? null : "1", pagina: null })} className="font-medium text-blue-600 hover:underline">
+              {verInactivos ? "Ver activos" : "Ver desactivados"}
+            </Link>
+          </span>
         </div>
 
         {lista.length === 0 ? (
           <Tarjeta className="text-center text-slate-600">
-            {q
+            {soloStockBajo
+              ? "No hay repuestos con stock bajo."
+              : q
               ? "No hay ítems con esa búsqueda."
               : puedeEditar
                 ? "La lista está vacía. Subí un archivo o agregá ítems a mano."
@@ -153,7 +174,7 @@ export default async function PreciosPage({ searchParams }: PageProps<"/precios"
         ) : (
           <ul className="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white">
             {lista.map((i) => (
-              <FilaPrecio key={i.id} item={i} puedeEditar={puedeEditar} />
+              <FilaPrecio key={i.id} item={i} puedeEditar={puedeEditar} conStock={conStock} />
             ))}
           </ul>
         )}
@@ -168,7 +189,7 @@ export default async function PreciosPage({ searchParams }: PageProps<"/precios"
       {puedeEditar && (
         <Tarjeta>
           <h2 className="mb-3 font-semibold text-slate-900">Agregar un ítem a mano</h2>
-          <FormPrecio id={null} />
+          <FormPrecio id={null} conStock={conStock} />
         </Tarjeta>
       )}
     </div>

@@ -28,6 +28,13 @@ export function traducirErrorDb(
     case "42501": // insufficient_privilege (RLS)
       return "No tenés permiso para hacer esta operación.";
   }
+  // Error no reconocido: se muestra completo en la terminal del servidor para poder corregirlo.
+  console.error("[db] Error de Supabase no reconocido:", {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+  });
   return "Ocurrió un error al guardar. Intentá de nuevo.";
 }
 

@@ -8,6 +8,7 @@ import { SIN_PERMISO } from "@/lib/permisos";
 import { traducirErrorDb } from "@/lib/db-errores";
 import { decimal, entero, texto, type EstadoForm } from "@/lib/formularios";
 import { esEstado, esTipoItem, esTipoTrabajo, type Estado } from "@/lib/ordenes";
+import { borrarArchivosOrden } from "@/lib/fotos-servidor";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -130,6 +131,9 @@ export async function eliminarOrden(id: string, vehiculoId: string): Promise<Est
   const { tallerId, sinPermiso } = await sesionCon("borrar");
   if (sinPermiso) return { error: SIN_PERMISO };
   const supabase = await createClient();
+
+  // Las fotos del bucket no se borran solas con la orden.
+  await borrarArchivosOrden(tallerId, id);
 
   // Primero los items, por si la base no los borra en cascada.
   const { error: errorItems } = await supabase.from("items_orden").delete().eq("orden_id", id).eq("taller_id", tallerId);

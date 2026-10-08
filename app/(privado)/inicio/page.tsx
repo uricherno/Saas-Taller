@@ -9,6 +9,8 @@ import { contarPendientes, obtenerRecordatorios } from "@/lib/recordatorios";
 import { obtenerPresupuestosPendientes } from "@/lib/presupuestos-pendientes";
 import { obtenerResumenes } from "@/lib/resumen-clientes";
 import { aFilasSeguimiento, seguimientosPendientes } from "@/lib/seguimientos";
+import { obtenerResumenMes, type ResumenMes } from "@/lib/resumen-mes";
+import { formatoPesos } from "@/lib/ordenes";
 import ListaOrdenes from "@/components/lista-ordenes";
 import ListaPresupuestos from "@/components/lista-presupuestos";
 import ListaSeguimientos from "@/components/lista-seguimientos";
@@ -44,6 +46,62 @@ function Indicador({
   );
 }
 
+const NOMBRE_MES = new Intl.DateTimeFormat("es-AR", { month: "long", timeZone: "America/Argentina/Buenos_Aires" });
+
+function Dato({ titulo, valor, detalle }: { titulo: string; valor: string; detalle?: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-sm font-semibold text-slate-700">{titulo}</p>
+      <p className="mt-1 text-2xl font-bold text-slate-900">{valor}</p>
+      {detalle && <p className="mt-1 text-xs text-slate-500">{detalle}</p>}
+    </div>
+  );
+}
+
+/** Facturación, órdenes terminadas, ticket promedio y autos en el taller. */
+function ResumenDelMes({ r, verFacturacion }: { r: ResumenMes; verFacturacion: boolean }) {
+  const variacion =
+    r.facturacionMesAnterior && r.facturacionMesAnterior > 0
+      ? Math.round((r.facturacion / r.facturacionMesAnterior - 1) * 100)
+      : null;
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold text-slate-900">
+        Resumen de {NOMBRE_MES.format(new Date())}
+      </h2>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {verFacturacion && (
+          <Dato
+            titulo="Facturación"
+            valor={formatoPesos(r.facturacion)}
+            detalle={
+              [
+                variacion != null && `${variacion >= 0 ? "+" : ""}${variacion} % vs. el mes pasado`,
+                r.cobrado != null && `Cobrado: ${formatoPesos(r.cobrado)}`,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "Órdenes terminadas este mes"
+            }
+          />
+        )}
+        <Dato titulo="Órdenes terminadas" valor={String(r.terminadas)} detalle="Terminadas o entregadas este mes" />
+        {verFacturacion && (
+          <Dato
+            titulo="Ticket promedio"
+            valor={r.ticketPromedio == null ? "—" : formatoPesos(r.ticketPromedio)}
+            detalle="Por orden terminada"
+          />
+        )}
+        <Dato
+          titulo="Autos en el taller"
+          valor={String(r.enTaller)}
+          detalle={r.listosParaRetirar ? `${r.listosParaRetirar} listos para retirar` : "En proceso"}
+        />
+      </div>
+    </section>
+  );
+}
+
 export default async function InicioPage() {
   const { usuario, taller, tallerId, rol } = await obtenerSesion();
   const supabase = await createClient();
@@ -52,7 +110,7 @@ export default async function InicioPage() {
   const puedeContactar = puede(rol, "contactarClientes");
 
   // Cada bloque falla por separado: si falta una migración, el resto del panel igual se ve.
-  const [abiertas, recordatorios, presupuestos, resumenes, seguimientos, equipo] = await Promise.all([
+  const [abiertas, recordatorios, presupuestos, resumenes, seguimientos, equipo, resumenMes, stockBajo] = await Promise.all([
     supabase
       .from("ordenes_trabajo")
       .select("id, fecha, estado, tipo_trabajo, descripcion, total, vehiculos(patente, marca, modelo, clientes(nombre))")
@@ -65,6 +123,8 @@ export default async function InicioPage() {
     obtenerResumenes(tallerId).catch(() => null),
     seguimientosPendientes(tallerId, { hasta: hoy }),
     obtenerEquipo(tallerId),
+    obtenerResumenMes(tallerId),
+    supabase.from("precios_stock_bajo").select("id", { count: "exact", head: true }).eq("taller_id", tallerId),
   ]);
 
   const ordenes = abiertas.data ?? [];
@@ -84,6 +144,17 @@ export default async function InicioPage() {
           Panel de <span className="font-semibold">{nombreTaller}</span>
         </p>
       </div>
+
+      {resumenMes && <ResumenDelMes r={resumenMes} verFacturacion={puede(rol, "verFacturacion")} />}
+
+      {!stockBajo.error && (stockBajo.count ?? 0) > 0 && (
+        <Link
+          href="/precios?stock=bajo"
+          className="block rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 hover:bg-amber-100"
+        >
+          <strong>Stock bajo:</strong> {stockBajo.count === 1 ? "1 repuesto llegó" : `${stockBajo.count} repuestos llegaron`} al mínimo. Ver cuáles →
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Indicador

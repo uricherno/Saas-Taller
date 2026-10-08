@@ -146,14 +146,22 @@ function ResumenCarga({ r }: { r: ResultadoCarga }) {
 
 // ─── Alta / edición manual ───────────────────────────────────────────────
 
+/** Número para un campo de texto: 1500.5 → "1500,5"; null → "". */
+function aCampo(n: number | string | null | undefined) {
+  return n == null ? "" : String(n).replace(".", ",");
+}
+
 export function FormPrecio({
   id,
   inicial,
   alTerminar,
+  conStock = false,
 }: {
   id: string | null;
-  inicial?: { codigo: string; descripcion: string; tipo: string; precio: number | string };
+  inicial?: { codigo: string; descripcion: string; tipo: string; precio: number | string; stock?: number | null; stockMinimo?: number | null };
   alTerminar?: () => void;
+  /** Mostrar los campos de stock (si la migración 20261012 está corrida). */
+  conStock?: boolean;
 }) {
   const [estado, enviar, cargando] = useActionState<EstadoForm, FormData>(async (prev, fd) => {
     const r = await guardarPrecio(id, prev, fd);
@@ -165,6 +173,8 @@ export function FormPrecio({
     descripcion: inicial?.descripcion ?? "",
     tipo: inicial?.tipo ?? "repuesto",
     precio: inicial ? String(inicial.precio).replace(".", ",") : "",
+    stock: aCampo(inicial?.stock),
+    stock_minimo: aCampo(inicial?.stockMinimo),
   };
   return (
     <form action={enviar} className="space-y-3" key={JSON.stringify(estado)}>
@@ -177,6 +187,12 @@ export function FormPrecio({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-[12rem_1fr_auto] sm:items-end">
         <Selector label="Tipo" name="tipo" opciones={TIPOS} defaultValue={v.tipo} />
         <Campo label="Precio ($)" name="precio" required inputMode="decimal" defaultValue={v.precio} placeholder="15000" />
+        {conStock && (
+          <div className="col-span-2 grid grid-cols-2 gap-3 sm:col-span-3">
+            <Campo label="Stock" opcional name="stock" inputMode="decimal" defaultValue={v.stock} placeholder="Vacío = no controlar" />
+            <Campo label="Avisar con stock en" opcional name="stock_minimo" inputMode="decimal" defaultValue={v.stock_minimo} placeholder="Ej: 2" />
+          </div>
+        )}
         <div className="col-span-2 flex gap-2 sm:col-span-1">
           {alTerminar && id && (
             <button type="button" onClick={alTerminar} className={BOTON_SECUNDARIO}>
@@ -201,13 +217,17 @@ export type ItemLista = {
   tipo: string;
   precio: number | string;
   activo: boolean;
+  /** null = no se controla stock de este ítem. */
+  stock: number | null;
+  stockMinimo: number | null;
   actualizado: string;
   /** Precio anterior y fecha del cambio (del historial). */
   anterior: { precio: number; fecha: string } | null;
   historial: { precio: number; fecha: string }[];
 };
 
-export function FilaPrecio({ item, puedeEditar }: { item: ItemLista; puedeEditar: boolean }) {
+export function FilaPrecio({ item, puedeEditar, conStock = false }: { item: ItemLista; puedeEditar: boolean; conStock?: boolean }) {
+  const stockBajo = item.stock != null && item.stockMinimo != null && item.stock <= item.stockMinimo;
   const [modo, setModo] = useState<"ver" | "editar" | "historial">("ver");
   const [cambiando, startCambio] = useTransition();
   const variacion =
@@ -227,6 +247,13 @@ export function FilaPrecio({ item, puedeEditar }: { item: ItemLista; puedeEditar
             <span className="font-mono">{item.codigo}</span> · {item.tipo === "mano_de_obra" ? "Mano de obra" : "Repuesto"} ·
             actualizado {item.actualizado}
           </p>
+          {item.stock != null && (
+            <p className={`text-xs font-medium ${stockBajo ? "text-amber-700" : "text-slate-600"}`}>
+              Stock: {item.stock.toLocaleString("es-AR")}
+              {item.stockMinimo != null && ` (mínimo ${item.stockMinimo.toLocaleString("es-AR")})`}
+              {stockBajo && " · stock bajo"}
+            </p>
+          )}
         </div>
         <div className="shrink-0 text-right">
           <p className="font-semibold text-slate-900">{formatoPesos(item.precio)}</p>
@@ -278,7 +305,7 @@ export function FilaPrecio({ item, puedeEditar }: { item: ItemLista; puedeEditar
       )}
       {modo === "editar" && (
         <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
-          <FormPrecio id={item.id} inicial={item} alTerminar={() => setModo("ver")} />
+          <FormPrecio id={item.id} inicial={item} alTerminar={() => setModo("ver")} conStock={conStock} />
         </div>
       )}
     </li>

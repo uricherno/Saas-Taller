@@ -55,6 +55,11 @@ export const obtenerSesion = cache(async (): Promise<Sesion> => {
   }
 
   const taller = Array.isArray(usuario.talleres) ? usuario.talleres[0] : usuario.talleres;
+  // Con el taller suspendido la base no deja ver nada (ni el propio taller).
+  if (!taller) {
+    const { data: estado } = await supabase.rpc("estado_cuenta");
+    if (estado === "suspendido") redirect("/auth/salir?motivo=suspendido");
+  }
   const rol = usuario.rol && esRol(usuario.rol) ? usuario.rol : "dueno";
 
   return {

@@ -9,6 +9,7 @@ const MENSAJES: Record<string, string> = {
   confirmado: "¡Email confirmado! Ya podés iniciar sesión.",
   enlace_invalido: "El enlace de confirmación no es válido o ya venció. Probá iniciar sesión o registrate de nuevo.",
   desactivado: "Tu usuario está desactivado. Pedile al dueño del taller que te vuelva a activar.",
+  suspendido: "La cuenta de este taller está suspendida. Escribinos para reactivarla.",
 };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
@@ -28,7 +29,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         </>
       }
     >
-      <FormLogin aviso={aviso} esError={mensaje === "enlace_invalido" || mensaje === "desactivado"} />
+      <FormLogin aviso={aviso} esError={mensaje === "enlace_invalido" || mensaje === "desactivado" || mensaje === "suspendido"} />
     </TarjetaAuth>
   );
 }
