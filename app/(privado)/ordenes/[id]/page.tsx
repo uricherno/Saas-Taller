@@ -5,7 +5,16 @@ import { createClient } from "@/lib/supabase/server";
 import { obtenerSesion } from "@/lib/sesion";
 import { puede } from "@/lib/permisos";
 import { faltaMigracion, MENSAJE_FALTA_MIGRACION } from "@/lib/db-errores";
-import { formatoFecha, formatoKm, formatoPesos, hoyISO, labelTipo, labelTipoTrabajo } from "@/lib/ordenes";
+import {
+  ESTADOS_ABIERTOS,
+  formatoFecha,
+  formatoKm,
+  formatoPesos,
+  hoyISO,
+  labelTipo,
+  labelTipoTrabajo,
+  type Estado,
+} from "@/lib/ordenes";
 import { mensajePresupuesto } from "@/lib/presupuesto";
 import { linkWhatsapp } from "@/lib/whatsapp";
 import { obtenerEquipo } from "@/lib/equipo";
@@ -15,6 +24,7 @@ import { origenActual } from "@/lib/origen";
 import BotonEliminar from "@/components/boton-eliminar";
 import BotonWhatsapp from "@/components/boton-whatsapp";
 import AvisosOrden from "@/components/avisos-orden";
+import CambiarEstado from "@/components/cambiar-estado";
 import BotonesPdf from "@/components/botones-pdf";
 import BotonActualizarPrecios from "@/components/boton-actualizar-precios";
 import ListaSeguimientos from "@/components/lista-seguimientos";
@@ -111,7 +121,7 @@ export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) 
     const lista = Array.isArray(i.precios) ? i.precios[0] : i.precios;
     return lista && Number(lista.precio) !== Number(i.precio_unitario);
   });
-  const ordenAbierta = orden.estado === "presupuestado" || orden.estado === "en_proceso";
+  const ordenAbierta = ESTADOS_ABIERTOS.includes(orden.estado as Estado);
 
   const totalRepuestos = items.filter((i) => i.tipo === "repuesto").reduce((a, i) => a + subtotal(i), 0);
   const totalManoObra = items.filter((i) => i.tipo !== "repuesto").reduce((a, i) => a + subtotal(i), 0);
@@ -184,9 +194,11 @@ export default async function OrdenPage({ params }: PageProps<"/ordenes/[id]">) 
         )}
       </div>
 
+      <CambiarEstado ordenId={id} estado={orden.estado} puedeEditar={puede(rol, "editarOrdenes")} />
+
       {datosLink?.aceptado && orden.estado === "presupuestado" && (
         <p className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 print:hidden">
-          <strong>El cliente aceptó el presupuesto</strong> el {datosLink.aceptado}. Pasá la orden a “En proceso” desde{" "}
+          <strong>El cliente aceptó el presupuesto</strong> el {datosLink.aceptado}. Pasá la orden a “En proceso” con los botones de estado o desde{" "}
           <Link href={`/ordenes/${id}/editar`} className="font-semibold underline">
             Editar orden
           </Link>

@@ -32,6 +32,7 @@ type FilaDb = {
   cliente_id: string | null;
   vehiculo_id: string | null;
   recordado_en: string | null;
+  origen?: string;
   clientes: { nombre: string; telefono: string | null } | { nombre: string; telefono: string | null }[] | null;
 };
 
@@ -52,9 +53,8 @@ export default async function TurnosPage({ searchParams }: PageProps<"/turnos">)
 
   const { data, error } = await supabase
     .from("turnos")
-    .select(
-      "id, inicio, duracion_min, estado, motivo, nombre_contacto, telefono, patente, cliente_id, vehiculo_id, recordado_en, clientes(nombre, telefono)",
-    )
+    // "*" para no fallar si todavía no se corrió la migración que agrega "origen".
+    .select("*, clientes(nombre, telefono)")
     .eq("taller_id", tallerId)
     .gte("inicio", inicioTurno(lunes, "00:00"))
     .lt("inicio", inicioTurno(sumarDias(lunes, 7), "00:00"))
@@ -81,6 +81,7 @@ export default async function TurnosPage({ searchParams }: PageProps<"/turnos">)
       clienteId: t.cliente_id,
       vehiculoId: t.vehiculo_id,
       recordadoEn: t.recordado_en,
+      online: t.origen === "online",
       mensaje: mensajeRecordatorioTurno({
         nombre: cliente?.nombre ?? t.nombre_contacto,
         taller: nombreTaller,

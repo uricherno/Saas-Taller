@@ -1,6 +1,7 @@
 // Valores tal como se guardan en la base. Si tu tabla usa otros textos,
 // cambialos solo acá.
 export const ESTADOS = [
+  { valor: "en_revision", label: "En revisión", color: "bg-violet-100 text-violet-800" },
   { valor: "presupuestado", label: "Presupuestado", color: "bg-amber-100 text-amber-800" },
   { valor: "en_proceso", label: "En proceso", color: "bg-blue-100 text-blue-800" },
   { valor: "terminado", label: "Terminado", color: "bg-green-100 text-green-800" },
@@ -11,7 +12,7 @@ export const ESTADOS = [
 export type Estado = (typeof ESTADOS)[number]["valor"];
 
 /** Abiertas: aparecen en /inicio. Las canceladas no están acá. */
-export const ESTADOS_ABIERTOS: Estado[] = ["presupuestado", "en_proceso"];
+export const ESTADOS_ABIERTOS: Estado[] = ["en_revision", "presupuestado", "en_proceso"];
 /** Cerradas: cuentan para recordatorios y actualizan el km. Las canceladas no están acá. */
 export const ESTADOS_CERRADOS: Estado[] = ["terminado", "entregado"];
 

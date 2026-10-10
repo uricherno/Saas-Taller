@@ -284,3 +284,23 @@ export async function actualizarPreciosOrden(ordenId: string): Promise<EstadoFor
   revalidatePath(`/ordenes/${ordenId}`);
   return { exito: cambiados ? `Se actualizaron ${cambiados} precios.` : "Los precios ya estaban al día." };
 }
+
+/** Cambia solo el estado de la orden (botones de la pantalla de la orden). */
+export async function cambiarEstadoOrden(id: string, estado: string): Promise<{ error?: string }> {
+  const { tallerId, sinPermiso } = await sesionCon("editarOrdenes");
+  if (sinPermiso) return { error: SIN_PERMISO };
+  if (!esEstado(estado)) return { error: "Estado no válido." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("ordenes_trabajo")
+    .update({ estado })
+    .eq("id", id)
+    .eq("taller_id", tallerId)
+    .select("id");
+  if (error) return { error: traducirErrorDb(error) };
+  if (!data?.length) return { error: "No se encontró la orden." };
+
+  revalidatePath("/", "layout");
+  return {};
+}

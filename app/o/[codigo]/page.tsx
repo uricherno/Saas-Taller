@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { formatoFecha, formatoKm, formatoPesos, labelTipo, labelTipoTrabajo } from "@/lib/ordenes";
+import { labelConcepto, labelMedioPago, sumarMontos } from "@/lib/cobros";
+import { BUCKET_FOTOS } from "@/lib/fotos";
 import EtiquetaEstado from "@/components/etiqueta-estado";
 import BotonAceptar from "./boton-aceptar";
 
@@ -26,6 +28,9 @@ type OrdenPublica = {
   vehiculo: { patente: string | null; marca: string | null; modelo: string | null; anio: number | null };
   cliente: string | null;
   items: { tipo: string; descripcion: string; cantidad: number | string; precio_unitario: number | string }[];
+  /** Desde la migración 20261015 (antes no vienen). */
+  pagos?: { fecha: string; monto: number | string; concepto: string; medio: string }[];
+  fotos?: { ruta: string; tipo: string; nota: string | null }[];
   aceptado_en: string | null;
   total_aceptado: number | string | null;
 };
@@ -62,6 +67,20 @@ export default async function OrdenPublicaPage({ params }: PageProps<"/o/[codigo
   const repuestos = d.items.filter((i) => i.tipo === "repuesto").reduce((a, i) => a + subtotal(i), 0);
   const manoObra = d.items.filter((i) => i.tipo !== "repuesto").reduce((a, i) => a + subtotal(i), 0);
   const telefonoLimpio = taller.telefono?.replace(/[^\d+]/g, "");
+  const pagos = d.pagos ?? [];
+  const cobrado = sumarMontos(pagos.map((p) => p.monto));
+  const saldo = Math.round((Number(orden.total ?? 0) - cobrado) * 100) / 100;
+
+  // Fotos: el bucket es privado; se firman por 1 hora (solo se puede con el link activo).
+  let fotos: { url: string; tipo: string; nota: string | null }[] = [];
+  if (d.fotos?.length) {
+    const { data: firmadas } = await supabase.storage.from(BUCKET_FOTOS).createSignedUrls(
+      d.fotos.map((f) => f.ruta),
+      60 * 60,
+    );
+    const urls = new Map((firmadas ?? []).filter((f) => f.signedUrl).map((f) => [f.path, f.signedUrl]));
+    fotos = d.fotos.flatMap((f) => (urls.get(f.ruta) ? [{ url: urls.get(f.ruta)!, tipo: f.tipo, nota: f.nota }] : []));
+  }
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 space-y-5 px-4 py-6">
@@ -132,8 +151,43 @@ export default async function OrdenPublicaPage({ params }: PageProps<"/o/[codigo
               <dt>Total</dt>
               <dd>{formatoPesos(orden.total)}</dd>
             </div>
+            {pagos.map((p, n) => (
+              <div key={n} className="flex justify-between text-green-700">
+                <dt>
+                  {labelConcepto(p.concepto)} {formatoFecha(p.fecha)}
+                  <span className="text-xs text-slate-500"> · {labelMedioPago(p.medio)}</span>
+                </dt>
+                <dd>− {formatoPesos(p.monto)}</dd>
+              </div>
+            ))}
+            {pagos.length > 0 && (
+              <div className="flex justify-between border-t border-slate-200 pt-1 text-lg font-bold text-slate-900">
+                <dt>{saldo > 0 ? "Saldo a pagar" : "Saldo"}</dt>
+                <dd>{formatoPesos(Math.max(saldo, 0))}</dd>
+              </div>
+            )}
           </dl>
         </section>
+
+        {fotos.length > 0 && (
+          <section className="border-t border-slate-200 py-4">
+            <p className="mb-2 text-xs font-medium tracking-wide text-slate-500 uppercase">Fotos</p>
+            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {fotos.map((f) => (
+                <li key={f.url} className="space-y-1">
+                  <a href={f.url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg border border-slate-200">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- links firmados de Supabase, vencen en 1 hora */}
+                    <img src={f.url} alt={f.nota ?? (f.tipo === "problema" ? "Problema" : "Estado del auto")} className="aspect-square w-full object-cover" />
+                  </a>
+                  <p className="text-xs text-slate-600">
+                    {f.tipo === "problema" ? "Problema" : "Estado del auto"}
+                    {f.nota && ` · ${f.nota}`}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {(orden.proximo_service_fecha || orden.proximo_service_km) && (
           <section className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900">

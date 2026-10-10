@@ -42,7 +42,7 @@ export async function obtenerResumenMes(tallerId: string): Promise<ResumenMes | 
       .gte("terminada_en", desdeAnterior)
       .lt("terminada_en", desde)
       .limit(5000),
-    supabase.from("ordenes_trabajo").select("estado").eq("taller_id", tallerId).in("estado", ["en_proceso", "terminado"]).limit(5000),
+    supabase.from("ordenes_trabajo").select("estado").eq("taller_id", tallerId).in("estado", ["en_revision", "en_proceso", "terminado"]).limit(5000),
     supabase.from("pagos").select("monto").eq("taller_id", tallerId).gte("fecha", `${mes}-01`).lte("fecha", hoy).limit(5000),
   ]);
 

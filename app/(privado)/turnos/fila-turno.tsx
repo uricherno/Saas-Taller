@@ -20,6 +20,8 @@ export type Turno = {
   clienteId: string | null;
   vehiculoId: string | null;
   recordadoEn: string | null;
+  /** Lo pidió el cliente desde la página de turnos online. */
+  online: boolean;
   mensaje: string;
 };
 
@@ -78,6 +80,7 @@ export default function FilaTurno({
             {turno.duracion}
             {turno.motivo && ` · ${turno.motivo}`}
           </p>
+          {turno.online && <p className="text-xs font-semibold text-violet-700">Pedido online · confirmalo por WhatsApp</p>}
           {turno.recordadoEn && <p className="text-xs text-green-700">Recordado por WhatsApp</p>}
         </div>
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${estado.color}`}>

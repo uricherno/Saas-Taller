@@ -5,7 +5,10 @@ import { faltaMigracion, MENSAJE_FALTA_MIGRACION } from "@/lib/db-errores";
 import { Tarjeta } from "@/components/ui";
 import { puede } from "@/lib/permisos";
 import SinPermiso from "@/components/sin-permiso";
+import { origenActual } from "@/lib/origen";
+import { leerHorario } from "@/lib/reservas";
 import FormAjustes from "./form-ajustes";
+import FormReservas from "./form-reservas";
 
 export const metadata: Metadata = { title: "Ajustes" };
 
@@ -18,6 +21,11 @@ export default async function AjustesPage() {
     .select("nombre, telefono, mensaje_recordatorio")
     .eq("id", tallerId)
     .maybeSingle();
+  // Aparte: si la migración 20261015 no está corrida, el resto de la pantalla igual anda.
+  const [{ data: reservas }, origen] = await Promise.all([
+    supabase.from("talleres").select("reservas_activas, reservas_codigo, horario").eq("id", tallerId).maybeSingle(),
+    origenActual(),
+  ]);
 
   return (
     <div className="mx-auto max-w-xl space-y-4">
@@ -29,6 +37,16 @@ export default async function AjustesPage() {
       ) : (
         <Tarjeta>
           <FormAjustes inicial={taller} />
+        </Tarjeta>
+      )}
+
+      {reservas && (
+        <Tarjeta>
+          <FormReservas
+            activas={reservas.reservas_activas}
+            horario={leerHorario(reservas.horario)}
+            link={`${origen}/reservar/${reservas.reservas_codigo}`}
+          />
         </Tarjeta>
       )}
 
