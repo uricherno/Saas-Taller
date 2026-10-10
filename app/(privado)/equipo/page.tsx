@@ -6,7 +6,7 @@ import { puede, ROLES } from "@/lib/permisos";
 import { linkInvitacion, origenActual } from "@/lib/origen";
 import SinPermiso from "@/components/sin-permiso";
 import { Tarjeta } from "@/components/ui";
-import { FilaInvitacion, FilaMiembro, FormInvitar } from "./componentes-equipo";
+import { FilaInvitacion, FilaMiembro, FormCrearEmpleado, FormInvitar } from "./componentes-equipo";
 
 export const metadata: Metadata = { title: "Equipo" };
 
@@ -66,6 +66,14 @@ export default async function EquipoPage() {
           <FilaMiembro key={`${u.id}-${u.rol}-${u.activo}`} usuario={u} esYo={u.id === userId} />
         ))}
       </ul>
+
+      <Tarjeta>
+        <h2 className="font-semibold text-slate-900">Crear usuario</h2>
+        <p className="mb-4 text-sm text-slate-500">
+          Creás el usuario con una contraseña y se la pasás a la persona. Entra al toque, sin mails de confirmación.
+        </p>
+        <FormCrearEmpleado />
+      </Tarjeta>
 
       <Tarjeta>
         <h2 className="font-semibold text-slate-900">Invitar a alguien</h2>

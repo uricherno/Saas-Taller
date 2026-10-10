@@ -97,3 +97,48 @@ export async function borrarInvitacion(id: string): Promise<EstadoForm> {
   revalidatePath("/equipo");
   return {};
 }
+
+const MENSAJES_CREAR: Record<string, string> = {
+  sin_permiso: SIN_PERMISO,
+  datos: "Revisá los datos: nombre, email válido y contraseña de al menos 8 caracteres.",
+  existe: "Ya existe una cuenta con ese email.",
+};
+
+/** El dueño crea el usuario con contraseña, sin mandar mails (se la pasa él a la persona). */
+export async function crearEmpleado(_prev: EstadoForm, formData: FormData): Promise<EstadoForm> {
+  const { sinPermiso } = await sesionCon("equipo");
+  if (sinPermiso) return { error: SIN_PERMISO };
+
+  const valores = {
+    nombre: texto(formData, "nombre"),
+    email: texto(formData, "email").toLowerCase(),
+    rol: texto(formData, "rol"),
+  };
+  const clave = String(formData.get("clave") ?? "");
+  if (!valores.nombre) return { error: "Escribí el nombre.", valores };
+  if (!EMAIL_RE.test(valores.email)) return { error: "Escribí un email válido (puede ser inventado, no se le manda nada).", valores };
+  if (!esRol(valores.rol)) return { error: "Elegí el rol.", valores };
+  if (clave.length < 8) return { error: "La contraseña tiene que tener al menos 8 caracteres.", valores };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("crear_empleado", {
+    p_email: valores.email,
+    p_nombre: valores.nombre,
+    p_rol: valores.rol,
+    p_clave: clave,
+  });
+  if (error) {
+    console.error("[equipo] No se pudo crear el usuario:", error);
+    return {
+      error: error.code === "PGRST202" ? "Falta correr la migración 20261016_crear_empleado.sql en Supabase." : "No se pudo crear el usuario.",
+      valores,
+    };
+  }
+  if (data !== "ok") return { error: MENSAJES_CREAR[String(data)] ?? "No se pudo crear el usuario.", valores };
+
+  revalidatePath("/equipo");
+  return {
+    exito: `Listo: ${valores.nombre} ya puede entrar con ${valores.email} y la contraseña que pusiste.`,
+    valores: { email: valores.email, clave },
+  };
+}

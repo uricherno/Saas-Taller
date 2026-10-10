@@ -4,7 +4,7 @@ import { useActionState, useState, useTransition } from "react";
 import type { EstadoForm } from "@/lib/formularios";
 import { ROLES, labelRol } from "@/lib/permisos";
 import { Alerta, BotonEnviar, Campo, Selector } from "@/components/ui";
-import { borrarInvitacion, cambiarActivo, cambiarRol, invitar } from "./actions";
+import { borrarInvitacion, cambiarActivo, cambiarRol, crearEmpleado, invitar } from "./actions";
 
 const OPCIONES_ROL = ROLES.map((r) => ({ valor: r.valor, label: r.label }));
 
@@ -86,6 +86,45 @@ export function FormInvitar({ taller }: { taller: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Crear el usuario directamente con contraseña (sin mails). */
+export function FormCrearEmpleado() {
+  const [estado, enviar, cargando] = useActionState<EstadoForm, FormData>(crearEmpleado, {});
+  const v = estado.valores;
+
+  return (
+    <form action={enviar} className="space-y-3" key={estado.exito ?? "form"}>
+      {estado.error && <Alerta tipo="error">{estado.error}</Alerta>}
+      {estado.exito && (
+        <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-900">
+          <p className="font-medium">{estado.exito}</p>
+          <p className="mt-1">
+            Usuario: <span className="font-mono">{v?.email}</span> · Contraseña: <span className="font-mono">{v?.clave}</span>
+          </p>
+          <p className="mt-1 text-xs">Pasáselos por WhatsApp. Después la puede cambiar desde “Olvidé mi contraseña”.</p>
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Campo label="Nombre" name="nombre" required maxLength={200} defaultValue={estado.exito ? "" : v?.nombre} />
+        <Selector label="Rol" name="rol" opciones={OPCIONES_ROL} defaultValue={estado.exito ? "recepcion" : (v?.rol ?? "recepcion")} />
+        <Campo
+          label="Email (usuario para entrar)"
+          name="email"
+          type="email"
+          inputMode="email"
+          autoComplete="off"
+          required
+          defaultValue={estado.exito ? "" : v?.email}
+          placeholder="juan@mitaller.com"
+        />
+        <Campo label="Contraseña" name="clave" type="text" autoComplete="new-password" required minLength={8} placeholder="Mínimo 8 caracteres" />
+      </div>
+      <div className="sm:w-48">
+        <BotonEnviar cargando={cargando}>Crear usuario</BotonEnviar>
+      </div>
+    </form>
   );
 }
 
