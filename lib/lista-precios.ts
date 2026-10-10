@@ -1,4 +1,5 @@
-import ExcelJS from "exceljs";
+// Versión empaquetada de ExcelJS (ver types/exceljs-dist.d.ts).
+import ExcelJS from "exceljs/dist/exceljs.min.js";
 
 // Lectura de listas de precios en Excel (.xlsx) o CSV, tal como vienen de
 // proveedores o de un Excel propio. Detecta solas las columnas por su título.
