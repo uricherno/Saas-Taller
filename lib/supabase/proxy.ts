@@ -57,7 +57,8 @@ export async function updateSession(request: NextRequest) {
     return redirect;
   };
 
-  if (!user && (pathname === "/" || empiezaCon(pathname, RUTAS_PRIVADAS))) {
+  // Sin sesión, "/" muestra la página de presentación (app/page.tsx).
+  if (!user && empiezaCon(pathname, RUTAS_PRIVADAS)) {
     return redirigir("/login");
   }
 
